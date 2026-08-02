@@ -6,40 +6,37 @@
 // =====================================================================
 const PdfExport = {
 
-  // ---------------- النسخة المصنعية: صفحة واحدة، صناديق مرقّمة متسلسلة بأسهم ----------------
+  // ---------------- نسخة الجدول (Excel-style): صف لكل خطوة، كل تفصيلة في خانة ----------------
   async exportFactorySheet(sop, { onProgress } = {}) {
     const root = document.getElementById("print-root");
     root.innerHTML = "";
     const sheet = document.createElement("div");
-    sheet.className = "fsheet";
+    sheet.className = "xsheet";
     root.appendChild(sheet);
 
-    // كل الخطوات مسطّحة بالترتيب عبر كل المراحل، مرقّمة تسلسليًا من 1
-    const flat = [];
-    (sop.stages || []).forEach(stage => (stage.steps || []).forEach(step => flat.push({ stage, step })));
-
-    const roles = [...new Set(flat.map(f => f.step.responsible_role).filter(Boolean))].map(roleLabelPdf).join("، ");
+    const roles = [...new Set(
+      (sop.stages || []).flatMap(s => (s.steps || []).map(st => st.responsible_role)).filter(Boolean)
+    )].map(roleLabelPdf).join("، ");
     const toolsTxt = (sop.tools || []).map(t => t.name).join("، ");
-    const rejectNotes = [...new Set(flat.map(f => f.step.reject_criteria).filter(Boolean))];
 
     sheet.innerHTML = `
-      <div class="fsheet-head">
-        <div class="fsheet-approvals-mini">
+      <div class="xsheet-head">
+        <div class="xsheet-approvals-mini">
           <div><b>أنشأ</b><br/>${esc(sop.created_by_name || "-")}</div>
           <div><b>آخر تعديل</b><br/>${esc(sop.updated_by_name || "-")}</div>
           <div><b>اعتماد</b><br/>${esc(sop.approved_by || "لسه")}</div>
         </div>
-        <div class="fsheet-title">
+        <div class="xsheet-title">
           <h1>${esc(sop.title_ar || sop.title)}</h1>
-          <div class="fsheet-sub">${esc(sop.title || "")}</div>
+          <div class="xsheet-sub">${esc(sop.title || "")}</div>
         </div>
-        <div class="fsheet-docno">
+        <div class="xsheet-docno">
           Ver. ${esc(sop.version || 1)}<br/>
           NO. ${esc(sop.code || "-")}
         </div>
       </div>
 
-      <table class="fsheet-info">
+      <table class="xsheet-info">
         <tr>
           <th>المسؤولية</th><th>بيئة الفحص</th><th>عدد مرات الفحص</th><th>فحص العدة</th><th>المكان</th>
         </tr>
@@ -52,68 +49,79 @@ const PdfExport = {
         </tr>
       </table>
 
-      ${rejectNotes.length ? `
-        <div class="fsheet-note">بعد التفتيش المرفوض كالآتي: ${rejectNotes.map(esc).join(" · ")}</div>
-      ` : ""}
-
-      <div class="fsheet-flow"></div>
+      <table class="xsheet-table">
+        <thead>
+          <tr>
+            <th style="width:26px;">م</th>
+            <th style="width:110px;">الخطوة</th>
+            <th style="width:110px;">المعدات والآلات</th>
+            <th>شرح الخطوة</th>
+            <th style="width:160px;">صورة الخطوة</th>
+            <th style="width:120px;">معيار القبول</th>
+            <th style="width:110px;">طريقة الفحص</th>
+            <th style="width:70px;">التكرار</th>
+            <th style="width:120px;">معيار الرفض</th>
+            <th style="width:120px;">الإجراء عند الرفض</th>
+            <th style="width:110px;">السيفتي</th>
+          </tr>
+        </thead>
+        <tbody id="xsheet-body"></tbody>
+      </table>
     `;
 
-    const flowRoot = sheet.querySelector(".fsheet-flow");
-    const perRow = flat.length > 10 ? 7 : Math.max(flat.length, 1);
-    for (let i = 0; i < flat.length; i += perRow) {
-      const rowItems = flat.slice(i, i + perRow);
-      const rowEl = document.createElement("div");
-      rowEl.className = "fsheet-row";
-      rowItems.forEach(({ step }, j) => {
-        const idx = i + j + 1;
-        const box = document.createElement("div");
-        box.className = "fsheet-box" + (step.is_critical ? " fsheet-critical" : "");
-        box.innerHTML = `
-          <div class="fsheet-num">${idx}</div>
-          <div class="fsheet-name">${esc(step.title_ar || step.title)}</div>
-          ${step.images && step.images[0] ? `<img class="fsheet-thumb" src="${esc(step.images[0].image_url)}" crossorigin="anonymous"/>` : ""}
-          <div class="fsheet-desc">${esc(truncateText(step.description, 130))}</div>
-          ${step.spec_value ? `<div class="fsheet-spec">${esc(step.spec_value)}</div>` : ""}
-        `;
-        rowEl.appendChild(box);
-        if (j < rowItems.length - 1) {
-          const arrow = document.createElement("div");
-          arrow.className = "fsheet-rowarrow";
-          arrow.textContent = "←";
-          rowEl.appendChild(arrow);
-        }
-      });
-      flowRoot.appendChild(rowEl);
-    }
+    const tbody = sheet.querySelector("#xsheet-body");
+    let idx = 0;
+    (sop.stages || []).forEach(stage => {
+      const stageRow = document.createElement("tr");
+      stageRow.innerHTML = `<td colspan="11" class="xsheet-stage-row">${esc(stage.title_ar || stage.title || "مرحلة")}</td>`;
+      tbody.appendChild(stageRow);
 
-    if (!flat.length) {
-      flowRoot.innerHTML = `<div class="hint">لا توجد خطوات مضافة بعد.</div>`;
+      (stage.steps || []).forEach(step => {
+        idx++;
+        const tr = document.createElement("tr");
+        if (step.is_critical) tr.className = "xsheet-critical-row";
+        tr.innerHTML = `
+          <td>${idx}</td>
+          <td><b>${esc(step.title_ar || step.title)}</b></td>
+          <td>${(step.requirements || []).map(esc).join("<br/>") || "-"}</td>
+          <td>${esc(step.description || "-")}</td>
+          <td class="xsheet-img-cell">
+            ${step.images && step.images[0] ? `<img class="xsheet-thumb" src="${esc(step.images[0].image_url)}" crossorigin="anonymous"/>` : "-"}
+          </td>
+          <td>${esc(step.accept_criteria || "-")}</td>
+          <td>${esc(step.inspection_method || "-")}</td>
+          <td>${esc(step.inspection_repeat || "-")}</td>
+          <td>${esc(step.reject_criteria || "-")}</td>
+          <td>${esc(step.reject_action || "-")}</td>
+          <td>${esc(step.ppe_notes || "-")}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    });
+
+    if (!idx) {
+      tbody.innerHTML = `<tr><td colspan="11" class="hint">لا توجد خطوات مضافة بعد.</td></tr>`;
     }
 
     if (onProgress) onProgress("جاري تجهيز الصور...");
     await waitForImages(sheet);
 
     if (onProgress) onProgress("جاري إنشاء ملف PDF...");
-    const canvas = await html2canvas(sheet, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-    const imgData = canvas.toDataURL("image/png");
-
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-    const margin = 18;
-    let w = pageW - margin * 2;
-    let h = (w * canvas.height) / canvas.width;
-    if (h > pageH - margin * 2) {
-      h = pageH - margin * 2;
-      w = (h * canvas.width) / canvas.height;
-    }
-    const x = (pageW - w) / 2;
-    const y = (pageH - h) / 2;
-    doc.addImage(imgData, "PNG", x, y, w, h);
 
-    const filename = `${(sop.code || "SOP")}_factory-sheet.pdf`;
+    await new Promise(resolve => {
+      doc.html(sheet, {
+        callback: () => resolve(),
+        x: 0, y: 0,
+        width: 842,               // A4 landscape width in pt
+        windowWidth: 1500,        // px width of sheet
+        autoPaging: "text",
+        html2canvas: { scale: 0.7, useCORS: true },
+      });
+    });
+
+    const filename = `${(sop.code || "SOP")}_table-sheet.pdf`;
     doc.save(filename);
     root.innerHTML = "";
   },
