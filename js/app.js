@@ -216,7 +216,7 @@ const App = {
       <div></div>
       <div style="display:flex; gap:8px;">
         ${Auth.canEdit() ? `<a href="#/sop/${sop.id}/edit" class="btn">✏️ تعديل</a>` : ""}
-        <button class="btn btn-ghost" id="factory-print-btn">🖨️ نسخة المصنع (صفحة واحدة)</button>
+        <button class="btn btn-ghost" id="factory-print-btn">📊 نسخة الجدول (Excel)</button>
         <button class="btn btn-primary" id="print-btn">🖨️ طباعة / PDF</button>
       </div>
     `;
@@ -310,21 +310,6 @@ const App = {
     if (!sop.stages.length) {
       main.insertAdjacentHTML("beforeend", `<div class="empty-state">لا توجد مراحل مضافة بعد.</div>`);
     } else {
-      main.insertAdjacentHTML("beforeend", `
-        <div class="view-section">
-          <h2 class="section-title" style="margin-top:0;">مسار المراحل (Flow)</h2>
-          <div class="flow-diagram">
-            ${sop.stages.map((stage, i) => `
-              ${i > 0 ? `<div class="flow-arrow">←</div>` : ""}
-              <div class="flow-node flow-static">
-                <div class="flow-num">${i + 1}</div>
-                <div class="flow-label">${esc(stage.title_ar || stage.title)}</div>
-                <div class="flow-sub">${(stage.steps || []).length} خطوة</div>
-              </div>
-            `).join("")}
-          </div>
-        </div>
-      `);
       main.insertAdjacentHTML("beforeend", `<h2 class="section-title">خطوات التشغيل</h2>`);
       sop.stages.forEach((stage, sIdx) => {
         const stageEl = document.createElement("div");
