@@ -297,77 +297,45 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 .psheet-video{display:flex; align-items:center; gap:8px; margin-top:6px; font-size:10.5px;}
 .psheet-video img{width:54px; height:54px; border:1px solid #ccc;}
 
-/* ---------- Factory compact sheet (single-page print) ---------- */
-.fsheet{
+/* ---------- Table-style print sheet (Excel-like, one row per step) ---------- */
+.xsheet{
   width:1500px; background:#fff; padding:20px 24px; font-family:var(--font-body);
   direction:rtl; color:#111;
 }
-.fsheet-head{
+.xsheet-head{
   display:flex; align-items:center; justify-content:space-between; gap:16px;
   border:2px solid #111; padding:10px 16px; margin-bottom:8px;
 }
-.fsheet-approvals-mini{display:flex; gap:14px; font-size:12px; border-left:1px solid #ccc; padding-left:14px;}
-.fsheet-title{flex:1; text-align:center;}
-.fsheet-title h1{font-family:var(--font-display); font-size:24px; margin:0;}
-.fsheet-sub{font-size:12px; color:#666;}
-.fsheet-docno{font-size:12px; text-align:left; border-right:1px solid #ccc; padding-right:14px; white-space:nowrap;}
+.xsheet-approvals-mini{display:flex; gap:14px; font-size:12px; border-left:1px solid #ccc; padding-left:14px;}
+.xsheet-title{flex:1; text-align:center;}
+.xsheet-title h1{font-family:var(--font-display); font-size:24px; margin:0;}
+.xsheet-sub{font-size:12px; color:#666;}
+.xsheet-docno{font-size:12px; text-align:left; border-right:1px solid #ccc; padding-right:14px; white-space:nowrap;}
 
-.fsheet-info{width:100%; border-collapse:collapse; margin-bottom:6px; font-size:13px;}
-.fsheet-info th, .fsheet-info td{border:1.5px solid #111; padding:8px 10px; text-align:center;}
-.fsheet-info th{background:#f1ede0; font-family:var(--font-mono); font-size:11px;}
+.xsheet-info{width:100%; border-collapse:collapse; margin-bottom:14px; font-size:13px;}
+.xsheet-info th, .xsheet-info td{border:1.5px solid #111; padding:8px 10px; text-align:center;}
+.xsheet-info th{background:#f1ede0; font-family:var(--font-mono); font-size:11px;}
 
-.fsheet-note{
-  border:1.5px solid #a3372c; background:#fdf1ef; color:#7a281f;
-  padding:6px 12px; font-size:12px; margin-bottom:10px; text-align:center;
+/* الجدول الرئيسي: صف لكل خطوة، كل تفصيلة في خانة منفصلة، زي إكسيل بالظبط */
+.xsheet-table{width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed;}
+.xsheet-table th, .xsheet-table td{
+  border:1px solid #999; padding:8px 9px; text-align:right; vertical-align:top;
+  word-wrap:break-word; overflow-wrap:break-word;
 }
+.xsheet-table thead th{
+  background:var(--blueprint-800); color:#fff; font-size:11.5px; text-align:center;
+  font-family:var(--font-display);
+}
+.xsheet-stage-row{
+  background:#f1ede0 !important; font-weight:700; text-align:center !important;
+  font-family:var(--font-display); font-size:13px; color:var(--blueprint-800);
+}
+.xsheet-critical-row td{background:#fdf6f4;}
+.xsheet-critical-row td:nth-child(2){border-right:4px solid #a3372c;}
 
-.fsheet-flow{display:flex; flex-direction:column; gap:10px;}
-.fsheet-row{display:flex; align-items:stretch; gap:0;}
-.fsheet-box{
-  flex:1; min-width:0; border:2px solid var(--blueprint-800); border-radius:6px;
-  padding:8px 10px; background:#fff; display:flex; flex-direction:column; gap:4px;
-}
-.fsheet-box.fsheet-critical{border-color:#a3372c; background:#fdf6f4;}
-.fsheet-num{
-  align-self:flex-start; width:22px; height:22px; border-radius:50%;
-  background:var(--blueprint-800); color:#fff; font-size:11px; font-weight:700;
-  display:flex; align-items:center; justify-content:center; font-family:var(--font-mono);
-}
-.fsheet-critical .fsheet-num{background:#a3372c;}
-.fsheet-name{font-weight:700; font-size:12.5px; line-height:1.3;}
-.fsheet-thumb{width:100%; height:60px; object-fit:cover; border-radius:3px; border:1px solid #ddd;}
-.fsheet-desc{font-size:10.5px; line-height:1.35; color:#333;}
-.fsheet-spec{font-size:10px; color:var(--blueprint-800); font-weight:600;}
-.fsheet-rowarrow{
-  flex:0 0 auto; width:22px; display:flex; align-items:center; justify-content:center;
-  font-size:18px; color:#c8941f; font-weight:900;
-}
-
-/* ---------- Flow diagram ---------- */
-.flow-diagram{
-  display:flex; align-items:stretch; gap:4px; overflow-x:auto; padding:10px 2px 16px;
-}
-.flow-node{
-  flex:0 0 auto; min-width:150px; max-width:190px;
-  background:#fff; border:2px solid var(--blueprint-800); border-radius:10px;
-  padding:12px 14px; cursor:grab; user-select:none;
-  box-shadow:var(--card-shadow);
-  transition:transform .12s ease, box-shadow .12s ease, opacity .12s ease;
-}
-.flow-node:active{cursor:grabbing;}
-.flow-node.dragging{opacity:.4; transform:scale(.97);}
-.flow-node.flow-static{cursor:default;}
-.flow-num{
-  display:inline-flex; align-items:center; justify-content:center;
-  width:22px; height:22px; border-radius:50%; background:var(--blueprint-800); color:#fff;
-  font-family:var(--font-mono); font-size:11px; font-weight:700; margin-bottom:6px;
-}
-.flow-label{font-family:var(--font-display); font-size:13.5px; font-weight:600; line-height:1.3;}
-.flow-sub{font-size:11px; color:#8a7f66; margin-top:4px;}
-.flow-arrow{
-  flex:0 0 auto; display:flex; align-items:center; justify-content:center;
-  font-size:20px; color:var(--blueprint-800); min-width:26px;
-}
+/* حجم صورة موحّد وواضح لكل الخطوات */
+.xsheet-img-cell{text-align:center; padding:4px;}
+.xsheet-thumb{width:140px; height:105px; object-fit:cover; border-radius:4px; border:1px solid #ccc; display:block; margin:0 auto;}
 
 .identity-box{
   background:var(--paper-dim); border:1px dashed var(--blueprint-line); border-radius:var(--radius);
