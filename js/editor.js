@@ -11,7 +11,6 @@ const Editor = {
     container.appendChild(this.buildSopForm(sop));
     container.appendChild(this.buildToolsSection(sop));
     container.appendChild(this.buildReferencesSection(sop));
-    container.appendChild(this.buildFlowDiagram(sop, () => this.render(container, sopId)));
 
     const stageHead = document.createElement("h2");
     stageHead.className = "section-title";
@@ -27,71 +26,15 @@ const Editor = {
     addStageBtn.className = "btn btn-primary";
     addStageBtn.textContent = "+ إضافة مرحلة جديدة";
     addStageBtn.onclick = async () => {
-      await DB.createStage(sop.id, { title: "مرحلة جديدة", title_ar: "مرحلة جديدة" }, sop.stages.length);
+      const stage = await DB.createStage(sop.id, { title: "مرحلة جديدة", title_ar: "مرحلة جديدة" }, sop.stages.length);
+      // نضيف أول خطوة على طول عشان تقدر تكتب فيها فورًا من غير خطوة زيادة
+      await DB.createStep(stage.id, { title: "خطوة جديدة", title_ar: "خطوة جديدة", requirements: [] }, 0);
       await this.bump(sop.id, "إضافة مرحلة جديدة");
       await this.render(container, sopId);
     };
     container.appendChild(addStageBtn);
 
     container.appendChild(this.buildRevisionHistory(sop));
-  },
-
-  // ---------------- Flow Diagram — رسم بصري لترتيب المراحل، بيتحدث بالسحب والإفلات ----------------
-  buildFlowDiagram(sop, onReorder) {
-    const card = document.createElement("div");
-    card.className = "form-card flow-card";
-    card.innerHTML = `
-      <h2 class="section-title" style="margin-top:0;">ترتيب المراحل (Flow)</h2>
-      <p class="hint">اسحب أي صندوق وحطه في مكانه الصحيح — الترتيب هنا هو نفسه ترتيب تنفيذ المراحل في الـ SOP، وبيتحدث فورًا مع كل سحبة.</p>
-    `;
-    const flow = document.createElement("div");
-    flow.className = "flow-diagram";
-    card.appendChild(flow);
-
-    let dragIndex = null;
-
-    const paint = () => {
-      flow.innerHTML = "";
-      if (!sop.stages.length) {
-        flow.innerHTML = `<div class="hint">لسه مفيش مراحل — أضف أول مرحلة تحت وهتظهر هنا تلقائي كصندوق في الفلو.</div>`;
-        return;
-      }
-      sop.stages.forEach((stage, i) => {
-        const node = document.createElement("div");
-        node.className = "flow-node";
-        node.draggable = true;
-        node.innerHTML = `
-          <div class="flow-num">${i + 1}</div>
-          <div class="flow-label">${esc(stage.title_ar || stage.title || "بدون اسم")}</div>
-          <div class="flow-sub">${(stage.steps || []).length} خطوة</div>
-        `;
-        node.addEventListener("dragstart", () => { dragIndex = i; node.classList.add("dragging"); });
-        node.addEventListener("dragend", () => node.classList.remove("dragging"));
-        node.addEventListener("dragover", (e) => e.preventDefault());
-        node.addEventListener("drop", async (e) => {
-          e.preventDefault();
-          if (dragIndex === null || dragIndex === i) return;
-          const moved = sop.stages.splice(dragIndex, 1)[0];
-          sop.stages.splice(i, 0, moved);
-          dragIndex = null;
-          try {
-            await DB.reorderStages(sop.stages.map(s => s.id));
-            await Editor.bump(sop.id, "إعادة ترتيب المراحل (سحب وإفلات)");
-            toast("تم تحديث الترتيب");
-          } catch (err) { toast(err.message, true); }
-          onReorder();
-        });
-        flow.appendChild(node);
-        if (i < sop.stages.length - 1) {
-          const arrow = document.createElement("div");
-          arrow.className = "flow-arrow";
-          arrow.textContent = "←"; // RTL: السهم بيوجّه من مرحلة لاللي بعدها بصريًا في اتجاه القراءة
-          flow.appendChild(arrow);
-        }
-      });
-    };
-    paint();
-    return card;
   },
 
   // تُستدعى بعد أي حفظ ناجح — بتزود رقم الإصدار وتسجّله في سجل التعديلات
