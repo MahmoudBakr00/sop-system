@@ -369,6 +369,15 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
   font-size:20px; color:var(--blueprint-800); min-width:26px;
 }
 
+.identity-box{
+  background:var(--paper-dim); border:1px dashed var(--blueprint-line); border-radius:var(--radius);
+  padding:10px 14px; margin:12px 0; font-size:12.5px; display:flex; flex-direction:column; gap:4px;
+}
+.editor-extra{
+  margin-top:14px; border-top:1px dashed var(--blueprint-line); padding-top:10px;
+}
+.editor-extra summary{cursor:pointer; font-size:12.5px; color:#8a7f66; font-weight:600;}
+
 /* ---------- New SOP sections ---------- */
 .section-title{
   font-family:var(--font-display); font-size:17px; margin:24px 0 12px;
