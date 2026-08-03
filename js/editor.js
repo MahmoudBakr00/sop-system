@@ -87,7 +87,10 @@ const Editor = {
         <div class="field"><label>العنوان (عربي)</label><input id="f-title-ar" value="${attr(sop.title_ar)}"/></div>
         <div class="field"><label>Title (English)</label><input id="f-title" value="${attr(sop.title)}"/></div>
       </div>
-      <div class="field"><label>الخط</label><input id="f-station" value="${attr(sop.station)}" placeholder="مثال: التجميع النهائي"/></div>
+      <div class="field-row">
+        <div class="field"><label>الخط</label><input id="f-station" value="${attr(sop.station)}" placeholder="مثال: التجميع النهائي"/></div>
+        <div class="field" style="max-width:150px;"><label>رقم المحطة على الخط (فريد)</label><input id="f-station-no" type="number" min="1" value="${sop.station_no ?? ""}" placeholder="مثال: 1"/></div>
+      </div>
       <div class="field-row">
         <div class="field"><label>عدد مرات الفحص</label><input id="f-freq" value="${attr(sop.inspection_frequency)}" placeholder="مثال: طبقًا لخطط العينات"/></div>
         <div class="field"><label>بيئة الفحص</label><input id="f-env" value="${attr(sop.inspection_environment)}" placeholder="مثال: الفحص على بعد 400 مم من اللوحة"/></div>
@@ -103,13 +106,7 @@ const Editor = {
           </label>
         </div>
         <p class="hint" id="sop-video-status"></p>
-        ${sop.video_url ? `
-          <div class="sop-video-box">
-            <video controls preload="metadata" class="sop-video-player">
-              <source src="${attr(sop.video_url)}"/>
-            </video>
-          </div>
-        ` : ""}
+        ${sop.video_url ? videoBoxHtml(sop.video_url) : ""}
       </div>
 
       <div class="identity-box">
@@ -124,6 +121,7 @@ const Editor = {
       <button class="btn" id="save-header-btn">حفظ بيانات الخط والعنوان</button>
     `;
     wireAutoTranslate(card.querySelector("#f-title-ar"), card.querySelector("#f-title"));
+    wireVideoBox(card);
 
     card.querySelector("#sop-video-file").addEventListener("change", async (ev) => {
       const file = ev.target.files[0];
@@ -157,11 +155,13 @@ const Editor = {
     }
 
     card.querySelector("#save-header-btn").onclick = async () => {
+      const stationNoRaw = card.querySelector("#f-station-no").value.trim();
       const payload = {
         status: Auth.isAdmin() ? card.querySelector("#f-status").value : sop.status,
         title_ar: card.querySelector("#f-title-ar").value.trim(),
         title: card.querySelector("#f-title").value.trim() || card.querySelector("#f-title-ar").value.trim(),
         station: card.querySelector("#f-station").value.trim(),
+        station_no: stationNoRaw === "" ? null : Number(stationNoRaw),
         inspection_frequency: card.querySelector("#f-freq").value.trim() || null,
         inspection_environment: card.querySelector("#f-env").value.trim() || null,
         video_url: card.querySelector("#f-video").value.trim() || null,
@@ -176,7 +176,13 @@ const Editor = {
           card.querySelector("#f-code").value = newCode;
         }
         toast("تم الحفظ");
-      } catch (e) { toast(e.message, true); }
+      } catch (e) {
+        if (String(e.message).includes("uq_sop_station_no") || e.code === "23505") {
+          toast("رقم المحطة ده مستخدم قبل كده في نفس الخط — اختار رقم تاني", true);
+        } else {
+          toast(e.message, true);
+        }
+      }
     };
     return card;
   },
@@ -339,7 +345,6 @@ const Editor = {
       el.className = "editor-stage";
       el.innerHTML = `
         <div class="field-row" style="align-items:flex-end;">
-          <div class="field" style="max-width:130px;"><label>رقم المحطة (فريد)</label><input class="st-station-no" type="number" min="1" value="${stage.station_no ?? ""}" placeholder="مثال: 1"/></div>
           <div class="field"><label>عنوان المرحلة ${sIdx + 1} (عربي)</label><input class="st-title-ar" value="${attr(stage.title_ar)}"/></div>
           <div class="field"><label>Title (English)</label><input class="st-title" value="${attr(stage.title)}"/></div>
         </div>
@@ -356,22 +361,14 @@ const Editor = {
       wrap.appendChild(el);
 
       el.querySelector(".save-stage").onclick = async () => {
-        const stationNoRaw = el.querySelector(".st-station-no").value.trim();
-        const stationNo = stationNoRaw === "" ? null : Number(stationNoRaw);
         try {
           await DB.updateStage(stage.id, {
             title_ar: el.querySelector(".st-title-ar").value.trim(),
             title: el.querySelector(".st-title").value.trim(),
-            station_no: stationNo,
           });
-          stage.station_no = stationNo;
           toast("تم حفظ المرحلة");
         } catch (e) {
-          if (String(e.message).includes("uq_stage_station_no") || e.code === "23505") {
-            toast("رقم المحطة ده مستخدم قبل كده في نفس الـ SOP — اختار رقم تاني", true);
-          } else {
-            toast(e.message, true);
-          }
+          toast(e.message, true);
         }
       };
       el.querySelector(".del-stage").onclick = async () => {
@@ -611,4 +608,62 @@ function toast(msg, isError = false) {
   t.className = isError ? "show error" : "show";
   clearTimeout(toast._t);
   toast._t = setTimeout(() => { t.className = ""; }, 3000);
+}
+
+// ---------------- فيديو الـ SOP: تشغيل + تنزيل موثوق (مستخدمة في editor.js و app.js) ----------------
+function guessVideoType(url) {
+  const ext = (String(url).split("?")[0].split(".").pop() || "").toLowerCase();
+  return { mp4: "video/mp4", webm: "video/webm", ogg: "video/ogg", mov: "video/quicktime" }[ext] || "";
+}
+
+// بعض المتصفحات بتتجاهل خاصية download العادية لو الرابط من دومين تاني (زي Supabase) —
+// الطريقة الموثوقة إنك تجيب الملف كـ blob وتنزّله من عندك
+async function downloadFile(url, filename) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("تعذر الوصول للملف (HTTP " + res.status + ")");
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename || "video";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+  } catch (e) {
+    toast("تعذر تنزيل الفيديو: " + e.message, true);
+  }
+}
+
+function videoBoxHtml(url) {
+  const type = guessVideoType(url);
+  return `
+    <div class="sop-video-box">
+      <video controls preload="metadata" class="sop-video-player">
+        <source src="${esc(url)}" ${type ? `type="${type}"` : ""}/>
+      </video>
+      <div class="video-error hint" style="display:none;">
+        ⚠️ الفيديو مش شغّال هنا مباشرة (ممكن الصيغة مش مدعومة في المتصفح، أو فيه مشكلة صلاحيات على التخزين). جرب "تنزيل" أو "فتح في تاب جديد".
+      </div>
+      <div style="display:flex; gap:10px; margin-top:6px; flex-wrap:wrap;">
+        <button type="button" class="btn btn-sm btn-ghost video-download-btn" data-url="${esc(url)}">⬇️ تنزيل الفيديو</button>
+        <a href="${esc(url)}" target="_blank" rel="noopener" class="btn btn-sm btn-ghost">↗️ فتح في تاب جديد</a>
+      </div>
+    </div>
+  `;
+}
+
+function wireVideoBox(container) {
+  const video = container.querySelector(".sop-video-player");
+  if (video) {
+    video.addEventListener("error", () => {
+      const err = container.querySelector(".video-error");
+      if (err) err.style.display = "block";
+    });
+  }
+  const btn = container.querySelector(".video-download-btn");
+  if (btn) {
+    btn.addEventListener("click", () => downloadFile(btn.dataset.url, "sop-video.mp4"));
+  }
 }
