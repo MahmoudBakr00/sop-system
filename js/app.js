@@ -301,7 +301,15 @@ const App = {
         <span>آخر تعديل: <b>${esc(sop.updated_by_name || "-")}</b> (${fmtDate(sop.updated_at)})</span>
         <span>اعتماد: <b>${esc(sop.approved_by || "لسه ما اتعمدتش")}</b> ${sop.approved_at ? `(${fmtDate(sop.approved_at)})` : ""}</span>
       </div>
-      ${sop.video_url ? `<a class="video-link" href="${esc(sop.video_url)}" target="_blank" rel="noopener">▶️ فيديو الفحص / التجميع الخاص بالـ SOP</a>` : ""}
+      ${sop.video_url ? `
+        <div class="sop-video-box">
+          <video controls preload="metadata" class="sop-video-player">
+            <source src="${esc(sop.video_url)}"/>
+            المتصفح مش بيدعم تشغيل الفيديو مباشرة — <a href="${esc(sop.video_url)}" target="_blank" rel="noopener">افتح الفيديو في تاب جديد</a>
+          </video>
+          <a href="${esc(sop.video_url)}" download class="hint">⬇️ تنزيل الفيديو</a>
+        </div>
+      ` : ""}
     `;
     main.appendChild(header);
 
