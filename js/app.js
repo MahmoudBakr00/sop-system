@@ -207,8 +207,10 @@ const App = {
       <div class="actions">
         <a class="btn btn-sm" href="#/sop/${sop.id}">عرض</a>
         ${Auth.canEdit() ? `<a class="btn btn-sm btn-ghost" href="#/sop/${sop.id}/edit">تعديل</a>` : ""}
+        <button class="btn btn-sm btn-ghost flow-toggle-btn">🔀 عرض الفلو</button>
         ${Auth.isAdmin() ? `<button class="btn btn-sm btn-danger del-btn">حذف</button>` : ""}
       </div>
+      <div class="card-flow-box" style="display:none;"></div>
     `;
     if (Auth.isAdmin()) {
       card.querySelector(".del-btn").onclick = async () => {
@@ -217,7 +219,46 @@ const App = {
         card.remove();
       };
     }
+    const flowBtn = card.querySelector(".flow-toggle-btn");
+    const flowBox = card.querySelector(".card-flow-box");
+    let loaded = false;
+    flowBtn.onclick = async () => {
+      const isHidden = flowBox.style.display === "none";
+      if (!isHidden) { flowBox.style.display = "none"; flowBtn.textContent = "🔀 عرض الفلو"; return; }
+      flowBox.style.display = "block";
+      flowBtn.textContent = "🔀 إخفاء الفلو";
+      if (loaded) return;
+      flowBox.innerHTML = `<div class="spinner"></div>`;
+      try {
+        const full = await DB.getSopFull(sop.id);
+        flowBox.innerHTML = this.buildStationFlowHtml(full.stages || []);
+        loaded = true;
+      } catch (e) {
+        flowBox.innerHTML = `<div class="hint">تعذر تحميل الفلو</div>`;
+      }
+    };
     return card;
+  },
+
+  // بناء HTML فلو المراحل (نفس المستخدم في صفحة العرض) — قابل لإعادة الاستخدام في الداشبورد
+  buildStationFlowHtml(stages) {
+    if (!stages || !stages.length) return `<div class="hint">لا توجد مراحل مضافة بعد.</div>`;
+    const ordered = [...stages].sort((a, b) => {
+      const an = a.station_no ?? 999999, bn = b.station_no ?? 999999;
+      return an - bn;
+    });
+    return `
+      <div class="station-flow">
+        ${ordered.map((stage, i) => `
+          ${i > 0 ? `<div class="station-connector"><div class="line"></div><div class="arrowhead"></div></div>` : ""}
+          <div class="station-node">
+            <div class="station-badge">${stage.station_no ?? "؟"}</div>
+            <div class="station-label">${esc(stage.title_ar || stage.title)}</div>
+            <div class="station-sub">${(stage.steps || []).length} خطوة</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
   },
 
   // ---------------- New ----------------
@@ -301,37 +342,17 @@ const App = {
         <span>آخر تعديل: <b>${esc(sop.updated_by_name || "-")}</b> (${fmtDate(sop.updated_at)})</span>
         <span>اعتماد: <b>${esc(sop.approved_by || "لسه ما اتعمدتش")}</b> ${sop.approved_at ? `(${fmtDate(sop.approved_at)})` : ""}</span>
       </div>
-      ${sop.video_url ? `
-        <div class="sop-video-box">
-          <video controls preload="metadata" class="sop-video-player">
-            <source src="${esc(sop.video_url)}"/>
-            المتصفح مش بيدعم تشغيل الفيديو مباشرة — <a href="${esc(sop.video_url)}" target="_blank" rel="noopener">افتح الفيديو في تاب جديد</a>
-          </video>
-          <a href="${esc(sop.video_url)}" download class="hint">⬇️ تنزيل الفيديو</a>
-        </div>
-      ` : ""}
+      ${sop.video_url ? videoBoxHtml(sop.video_url) : ""}
     `;
     main.appendChild(header);
+    wireVideoBox(header);
 
     // لوحة فلو المراحل — مرتبة حسب رقم المحطة اللي اتحط لكل مرحلة
     if (sop.stages && sop.stages.length) {
-      const ordered = [...sop.stages].sort((a, b) => {
-        const an = a.station_no ?? 999999, bn = b.station_no ?? 999999;
-        return an - bn;
-      });
       main.insertAdjacentHTML("beforeend", `
         <div class="view-section">
           <h2 class="section-title" style="margin-top:0;">لوحة المراحل (Flow)</h2>
-          <div class="station-flow">
-            ${ordered.map((stage, i) => `
-              ${i > 0 ? `<div class="station-connector"><div class="line"></div><div class="arrowhead"></div></div>` : ""}
-              <div class="station-node">
-                <div class="station-badge">${stage.station_no ?? "؟"}</div>
-                <div class="station-label">${esc(stage.title_ar || stage.title)}</div>
-                <div class="station-sub">${(stage.steps || []).length} خطوة</div>
-              </div>
-            `).join("")}
-          </div>
+          ${this.buildStationFlowHtml(sop.stages)}
         </div>
       `);
     }
