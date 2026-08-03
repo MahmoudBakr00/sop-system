@@ -7,17 +7,30 @@
 // يلتقط عنصر الـ HTML كصورة واحدة عالية الدقة، ويقصّه على شكل صفحات A4 (بدون أي
 // اعتماد على نصوص جسPDF الداخلية) — ده اللي بيمنع تشويه الحروف العربية اللي بيحصل
 // مع doc.html()'s autoPaging لإنها بتحاول ترسم نص حقيقي بخط لاتيني افتراضي.
-async function renderPagedPdf({ sheet, orientation = "p", filename, scale = 2 }) {
+async function renderPagedPdf({ sheet, orientation = "p", filename, scale = 2, footerEl = null }) {
   const canvas = await html2canvas(sheet, { scale, useCORS: true, backgroundColor: "#ffffff" });
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "pt", format: "a4", orientation });
   const margin = 18;
   const pageW = doc.internal.pageSize.getWidth() - margin * 2;
-  const pageH = doc.internal.pageSize.getHeight() - margin * 2;
+  const fullPageH = doc.internal.pageSize.getHeight() - margin * 2;
+
+  // الفوتر الثابت (لو موجود) بيتلقّط مرة واحدة بس وبيتكرر في كل صفحة
+  let footerCanvas = null;
+  let footerHPt = 0;
+  if (footerEl) {
+    const root = document.getElementById("print-root");
+    footerEl.style.width = sheet.offsetWidth + "px";
+    root.appendChild(footerEl);
+    footerCanvas = await html2canvas(footerEl, { scale, useCORS: true, backgroundColor: "#ffffff" });
+    footerEl.remove();
+    footerHPt = (footerCanvas.height / footerCanvas.width) * pageW;
+  }
+  const contentPageH = fullPageH - (footerCanvas ? footerHPt + 8 : 0);
 
   const pxPerPt = canvas.width / pageW;       // px-per-pt عند نفس عرض الصفحة
-  const pageHeightPx = Math.floor(pageH * pxPerPt);
+  const pageHeightPx = Math.floor(contentPageH * pxPerPt);
 
   let renderedPx = 0;
   let pageIndex = 0;
@@ -34,11 +47,30 @@ async function renderPagedPdf({ sheet, orientation = "p", filename, scale = 2 })
     if (pageIndex > 0) doc.addPage();
     doc.addImage(imgData, "PNG", margin, margin, pageW, sliceHeightPx / pxPerPt);
 
+    if (footerCanvas) {
+      const footerData = footerCanvas.toDataURL("image/png");
+      const footerY = margin + fullPageH - footerHPt;
+      doc.addImage(footerData, "PNG", margin, footerY, pageW, footerHPt);
+    }
+
     renderedPx += sliceHeightPx;
     pageIndex++;
   }
 
   doc.save(filename);
+}
+
+// كود الفورم الثابت اللي بيظهر أسفل كل صفحة مطبوعة
+function buildFormFooter() {
+  const el = document.createElement("div");
+  el.className = "form-footer";
+  el.innerHTML = `
+    <span>Midea Electric Egypt</span>
+    <span>FR-08-05-01-05</span>
+    <span>Issue: 1.0</span>
+    <span>ISO 9001:2015</span>
+  `;
+  return el;
 }
 
 const PdfExport = {
@@ -55,13 +87,16 @@ const PdfExport = {
       (sop.stages || []).flatMap(s => (s.steps || []).map(st => st.responsible_role)).filter(Boolean)
     )].map(roleLabelPdf).join("، ");
     const toolsTxt = (sop.tools || []).map(t => t.name).join("، ");
+    let logoUrl = "";
+    try { logoUrl = (await DB.getAppSettings()).logo_url || ""; } catch (_) { /* no logo yet */ }
 
     sheet.innerHTML = `
       <div class="xsheet-head">
+        ${logoUrl ? `<img class="xsheet-logo" src="${esc(logoUrl)}" crossorigin="anonymous"/>` : `<div class="xsheet-logo"></div>`}
         <div class="xsheet-approvals-mini">
           <div><b>أنشأ</b><br/>${esc(sop.created_by_name || "-")}</div>
           <div><b>آخر تعديل</b><br/>${esc(sop.updated_by_name || "-")}</div>
-          <div><b>اعتماد</b><br/>${esc(sop.approved_by || "لسه")}</div>
+          <div><b>اعتماد</b><br/>${esc(sop.approved_by || "لسه")}${sop.approved_at ? ` — ${esc(sop.approved_at)}` : ""}</div>
         </div>
         <div class="xsheet-title">
           <h1>${esc(sop.title_ar || sop.title)}</h1>
@@ -69,13 +104,13 @@ const PdfExport = {
         </div>
         <div class="xsheet-docno">
           Ver. ${esc(sop.version || 1)}<br/>
-          NO. ${esc(sop.code || "-")}
+          <b>NO. ${esc(sop.code || "بدون كود")}</b>
         </div>
       </div>
 
       <table class="xsheet-info">
         <tr>
-          <th>المسؤولية</th><th>بيئة الفحص</th><th>عدد مرات الفحص</th><th>فحص العدة</th><th>المكان</th>
+          <th>المسؤولية</th><th>بيئة الفحص</th><th>عدد مرات الفحص</th><th>فحص العدة</th><th>الخط</th>
         </tr>
         <tr>
           <td>${esc(roles || "-")}</td>
@@ -91,15 +126,14 @@ const PdfExport = {
           <tr>
             <th style="width:26px;">م</th>
             <th style="width:110px;">الخطوة</th>
-            <th style="width:110px;">المعدات والآلات</th>
+            <th style="width:100px;">المعدات والآلات</th>
+            <th style="width:100px;">السيفتي</th>
             <th>شرح الخطوة</th>
             <th style="width:160px;">صورة الخطوة</th>
-            <th style="width:120px;">معيار القبول</th>
+            <th style="width:130px;">معيار القبول</th>
             <th style="width:110px;">طريقة الفحص</th>
             <th style="width:70px;">التكرار</th>
-            <th style="width:120px;">معيار الرفض</th>
-            <th style="width:120px;">الإجراء عند الرفض</th>
-            <th style="width:110px;">السيفتي</th>
+            <th style="width:130px;">الإجراء عند الرفض</th>
           </tr>
         </thead>
         <tbody id="xsheet-body"></tbody>
@@ -110,7 +144,7 @@ const PdfExport = {
     let idx = 0;
     (sop.stages || []).forEach(stage => {
       const stageRow = document.createElement("tr");
-      stageRow.innerHTML = `<td colspan="11" class="xsheet-stage-row">${esc(stage.title_ar || stage.title || "مرحلة")}</td>`;
+      stageRow.innerHTML = `<td colspan="10" class="xsheet-stage-row">${esc(stage.title_ar || stage.title || "مرحلة")}</td>`;
       tbody.appendChild(stageRow);
 
       (stage.steps || []).forEach(step => {
@@ -121,6 +155,7 @@ const PdfExport = {
           <td>${idx}</td>
           <td><b>${esc(step.title_ar || step.title)}</b></td>
           <td>${(step.requirements || []).map(esc).join("<br/>") || "-"}</td>
+          <td>${esc(step.ppe_notes || "-")}</td>
           <td>${esc(step.description || "-")}</td>
           <td class="xsheet-img-cell">
             ${step.images && step.images[0] ? `<img class="xsheet-thumb" src="${esc(step.images[0].image_url)}" crossorigin="anonymous"/>` : "-"}
@@ -128,16 +163,14 @@ const PdfExport = {
           <td>${esc(step.accept_criteria || "-")}</td>
           <td>${esc(step.inspection_method || "-")}</td>
           <td>${esc(step.inspection_repeat || "-")}</td>
-          <td>${esc(step.reject_criteria || "-")}</td>
           <td>${esc(step.reject_action || "-")}</td>
-          <td>${esc(step.ppe_notes || "-")}</td>
         `;
         tbody.appendChild(tr);
       });
     });
 
     if (!idx) {
-      tbody.innerHTML = `<tr><td colspan="11" class="hint">لا توجد خطوات مضافة بعد.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" class="hint">لا توجد خطوات مضافة بعد.</td></tr>`;
     }
 
     if (onProgress) onProgress("جاري تجهيز الصور...");
@@ -149,6 +182,7 @@ const PdfExport = {
       orientation: "l",
       filename: `${(sop.code || "SOP")}_table-sheet.pdf`,
       scale: 2,
+      footerEl: buildFormFooter(),
     });
     root.innerHTML = "";
   },
@@ -160,16 +194,19 @@ const PdfExport = {
     sheet.className = "psheet";
     root.appendChild(sheet);
 
+    let logoUrl = "";
+    try { logoUrl = (await DB.getAppSettings()).logo_url || ""; } catch (_) { /* no logo yet */ }
+
     sheet.innerHTML = `
       <div class="psheet-head">
-        <div>
-          <div class="code">Document No: ${esc(sop.code || "-")}</div>
+        ${logoUrl ? `<img class="psheet-logo" src="${esc(logoUrl)}" crossorigin="anonymous"/>` : `<div class="psheet-logo"></div>`}
+        <div style="flex:1;">
+          <div class="code"><b>Document No: ${esc(sop.code || "بدون كود")}</b></div>
           <h1>${esc(sop.title_ar || sop.title)}</h1>
           <div class="code">${esc(sop.title_ar ? sop.title : "")}</div>
         </div>
         <div class="meta">
-          خط الإنتاج: <b>${esc(sop.product_line || "-")}</b><br/>
-          المحطة: <b>${esc(sop.station || "-")}</b><br/>
+          الخط: <b>${esc(sop.station || "-")}</b><br/>
           الإصدار: Rev. v${sop.version || 1}<br/>
           الحالة: ${esc(statusLabel(sop.status))}<br/>
           تاريخ الطباعة: ${new Date().toLocaleDateString("ar-EG")}
@@ -179,13 +216,13 @@ const PdfExport = {
         <tr>
           <td><b>أنشأ (Created)</b><br/>${esc(sop.created_by_name || "-")}<br/>${sop.created_at ? new Date(sop.created_at).toLocaleDateString("ar-EG") : ""}</td>
           <td><b>آخر تعديل (Updated)</b><br/>${esc(sop.updated_by_name || "-")}<br/>${sop.updated_at ? new Date(sop.updated_at).toLocaleDateString("ar-EG") : ""}</td>
-          <td><b>اعتماد (Approved)</b><br/>${esc(sop.approved_by || "لسه ما اتعمدتش")}<br/>${esc(sop.approved_at || "")}</td>
+          <td><b>اعتماد (Approved)</b><br/>${esc(sop.approved_by || "لسه ما اتعمدتش")}<br/>${sop.approved_at ? new Date(sop.approved_at).toLocaleDateString("ar-EG") : ""}</td>
         </tr>
       </table>
-      ${(sop.description || sop.scope) ? `
-        <div class="psheet-block">
-          ${sop.description ? `<p><b>الهدف:</b> ${esc(sop.description)}</p>` : ""}
-          ${sop.scope ? `<p><b>النطاق:</b> ${esc(sop.scope)}</p>` : ""}
+      ${sop.video_url ? `
+        <div class="psheet-video">
+          <img class="qr-target" data-video="${esc(sop.video_url)}" />
+          <span>امسح الكود لمشاهدة فيديو الفحص / التجميع الخاص بالـ SOP<br/><span style="color:#888;">${esc(sop.video_url)}</span></span>
         </div>
       ` : ""}
       ${(sop.tools && sop.tools.length) ? `
@@ -225,13 +262,12 @@ const PdfExport = {
               ${step.requirements && step.requirements.length ? `
                 <div class="psheet-req"><b>المعدات والآلات المستخدمة:</b> ${step.requirements.map(r => esc(r)).join(" · ")}</div>
               ` : ""}
+              ${step.ppe_notes ? `<div class="psheet-req">⚠️ <b>مهمات وإجراءات الوقاية:</b> ${esc(step.ppe_notes)}</div>` : ""}
               ${step.description ? `<p>${esc(step.description)}</p>` : ""}
               ${step.accept_criteria ? `<div class="psheet-req">✔ <b>معيار القبول:</b> ${esc(step.accept_criteria)}</div>` : ""}
               ${step.inspection_method ? `<div class="psheet-req"><b>طريقة الفحص:</b> ${esc(step.inspection_method)}</div>` : ""}
               ${step.inspection_repeat ? `<div class="psheet-req"><b>التكرار:</b> ${esc(step.inspection_repeat)}</div>` : ""}
-              ${step.reject_criteria ? `<div class="psheet-req">✘ <b>معيار الرفض:</b> ${esc(step.reject_criteria)}</div>` : ""}
               ${step.reject_action ? `<div class="psheet-req">↩ <b>الإجراء عند الرفض:</b> ${esc(step.reject_action)}</div>` : ""}
-              ${step.ppe_notes ? `<div class="psheet-req">⚠️ <b>السيفتي:</b> ${esc(step.ppe_notes)}</div>` : ""}
               ${step.responsible_role ? `<div class="psheet-req"><b>المسؤول:</b> ${esc(roleLabelPdf(step.responsible_role))}</div>` : ""}
               ${step.spec_value ? `<div class="psheet-req"><b>مواصفة فنية:</b> ${esc(step.spec_value)}</div>` : ""}
               ${step.defect_code ? `<div class="psheet-req"><b>كود العيب:</b> ${esc(step.defect_code)}</div>` : ""}
@@ -242,12 +278,6 @@ const PdfExport = {
                   </figure>
                 `).join("")}
               </div>
-              ${step.video_url ? `
-                <div class="psheet-video">
-                  <img class="qr-target" data-video="${esc(step.video_url)}" />
-                  <span>امسح الكود لمشاهدة فيديو الفحص / التجميع<br/><span style="color:#888;">${esc(step.video_url)}</span></span>
-                </div>
-              ` : ""}
             </div>
           </div>
         `;
@@ -305,7 +335,7 @@ const PdfExport = {
 
     if (onProgress) onProgress("جاري إنشاء ملف PDF...");
     const filename = `${(sop.code || "SOP")}_${(sop.title || "sop").replace(/[^\w\-]+/g, "_")}.pdf`;
-    await renderPagedPdf({ sheet, orientation: "p", filename, scale: 2 });
+    await renderPagedPdf({ sheet, orientation: "p", filename, scale: 2, footerEl: buildFormFooter() });
     root.innerHTML = "";
   },
 };
