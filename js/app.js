@@ -119,6 +119,7 @@ const App = {
         <div><h1>تعليمات التشغيل (SOPs)</h1><p>كل مرحلة فيها خطوات، متطلبات، صور، وفيديو للفحص أو التجميع</p></div>
         ${Auth.canEdit() ? `<a href="#/new" class="btn btn-primary">+ SOP جديد</a>` : ""}
       </div>
+      ${Auth.isAdmin() ? `<div id="logo-settings"></div>` : ""}
       <div class="filters">
         <input id="search-box" placeholder="ابحث بالاسم أو الكود..."/>
         <select id="status-filter">
@@ -130,6 +131,12 @@ const App = {
       </div>
       <div id="sop-grid" class="sop-grid"><div class="spinner"></div></div>
     `;
+
+    if (Auth.isAdmin()) {
+      const logoBox = main.querySelector("#logo-settings");
+      this.renderLogoSettings(logoBox);
+    }
+
     const load = async () => {
       const search = main.querySelector("#search-box").value.trim();
       const status = main.querySelector("#status-filter").value;
@@ -150,6 +157,42 @@ const App = {
     await load();
   },
 
+  // لوجو الشركة — بيتضاف مرة واحدة بس من هنا، وبيظهر تلقائيًا في كل الطباعات بعد كده
+  async renderLogoSettings(box) {
+    box.innerHTML = `<div class="spinner"></div>`;
+    let settings;
+    try {
+      settings = await DB.getAppSettings();
+    } catch (e) {
+      box.innerHTML = "";
+      return;
+    }
+    box.innerHTML = `
+      <div class="logo-settings-box">
+        ${settings.logo_url
+          ? `<img src="${esc(settings.logo_url)}" class="logo-preview"/>`
+          : `<div class="logo-preview logo-empty">مفيش لوجو لسه</div>`}
+        <div>
+          <b>لوجو الشركة</b>
+          <p class="hint">بيتضاف مرة واحدة بس هنا، وبيظهر تلقائيًا على كل الأوراق المطبوعة بعد كده.</p>
+          <label class="btn btn-sm">
+            ${settings.logo_url ? "تغيير اللوجو" : "+ رفع اللوجو"}
+            <input type="file" id="logo-file" accept="image/*" style="display:none;"/>
+          </label>
+        </div>
+      </div>
+    `;
+    box.querySelector("#logo-file").addEventListener("change", async (ev) => {
+      const file = ev.target.files[0];
+      if (!file) return;
+      try {
+        await DB.uploadCompanyLogo(file);
+        toast("تم حفظ اللوجو");
+        await this.renderLogoSettings(box);
+      } catch (e) { toast(e.message, true); }
+    });
+  },
+
   sopCard(sop) {
     const card = document.createElement("div");
     card.className = `sop-card status-${sop.status}`;
@@ -158,7 +201,7 @@ const App = {
       <h3>${esc(sop.title_ar || sop.title)}</h3>
       <div class="meta">
         <span class="badge ${sop.status}">${statusLabel(sop.status)}</span>
-        ${sop.product_line ? `<span>${esc(sop.product_line)}</span>` : ""}
+        ${sop.station ? `<span>${esc(sop.station)}</span>` : ""}
         <span>v${sop.version || 1}</span>
       </div>
       <div class="actions">
@@ -249,26 +292,38 @@ const App = {
       <div class="code">Document No: ${esc(sop.code || "— بدون كود بعد —")}</div>
       <h1>${esc(sop.title_ar || sop.title)}</h1>
       <div class="tags">
-        <span>خط الإنتاج: <b>${esc(sop.product_line || "-")}</b></span>
-        <span>المحطة: <b>${esc(sop.station || "-")}</b></span>
+        <span>الخط: <b>${esc(sop.station || "-")}</b></span>
         <span>الإصدار: <b>Rev. v${sop.version || 1}</b></span>
         <span>الحالة: <b>${statusLabel(sop.status)}</b></span>
       </div>
       <div class="tags" style="margin-top:8px;">
         <span>أنشأ: <b>${esc(sop.created_by_name || "-")}</b> (${fmtDate(sop.created_at)})</span>
         <span>آخر تعديل: <b>${esc(sop.updated_by_name || "-")}</b> (${fmtDate(sop.updated_at)})</span>
-        <span>اعتماد: <b>${esc(sop.approved_by || "لسه ما اتعمدتش")}</b> ${sop.approved_at ? `(${esc(sop.approved_at)})` : ""}</span>
+        <span>اعتماد: <b>${esc(sop.approved_by || "لسه ما اتعمدتش")}</b> ${sop.approved_at ? `(${fmtDate(sop.approved_at)})` : ""}</span>
       </div>
+      ${sop.video_url ? `<a class="video-link" href="${esc(sop.video_url)}" target="_blank" rel="noopener">▶️ فيديو الفحص / التجميع الخاص بالـ SOP</a>` : ""}
     `;
     main.appendChild(header);
 
-    // 2) الهدف والنطاق
-    if (sop.description || sop.scope) {
+    // لوحة فلو المراحل — مرتبة حسب رقم المحطة اللي اتحط لكل مرحلة
+    if (sop.stages && sop.stages.length) {
+      const ordered = [...sop.stages].sort((a, b) => {
+        const an = a.station_no ?? 999999, bn = b.station_no ?? 999999;
+        return an - bn;
+      });
       main.insertAdjacentHTML("beforeend", `
         <div class="view-section">
-          <h2 class="section-title">الهدف والنطاق</h2>
-          ${sop.description ? `<p><b>الهدف:</b> ${esc(sop.description)}</p>` : ""}
-          ${sop.scope ? `<p><b>النطاق:</b> ${esc(sop.scope)}</p>` : ""}
+          <h2 class="section-title" style="margin-top:0;">لوحة المراحل (Flow)</h2>
+          <div class="station-flow">
+            ${ordered.map((stage, i) => `
+              ${i > 0 ? `<div class="station-arrow">←</div>` : ""}
+              <div class="station-node">
+                <div class="station-badge">${stage.station_no ?? "؟"}</div>
+                <div class="station-label">${esc(stage.title_ar || stage.title)}</div>
+                <div class="station-sub">${(stage.steps || []).length} خطوة</div>
+              </div>
+            `).join("")}
+          </div>
         </div>
       `);
     }
@@ -332,6 +387,7 @@ const App = {
                 <div class="hint"><b>المعدات والآلات المستخدمة:</b></div>
                 <ul class="req-list">${step.requirements.map(r => `<li>${esc(r)}</li>`).join("")}</ul>
               ` : ""}
+              ${step.ppe_notes ? `<div class="hint">⚠️ مهمات وإجراءات الوقاية: ${esc(step.ppe_notes)}</div>` : ""}
               ${step.description ? `<div class="step-desc">${esc(step.description)}</div>` : ""}
               ${step.images && step.images.length ? `
                 <div class="step-images">
@@ -343,22 +399,17 @@ const App = {
                   `).join("")}
                 </div>
               ` : ""}
-              ${(step.accept_criteria || step.inspection_method || step.inspection_repeat || step.reject_criteria || step.reject_action) ? `
+              ${(step.accept_criteria || step.inspection_method || step.inspection_repeat || step.reject_action) ? `
                 <div class="accept-reject">
                   ${step.accept_criteria ? `<div class="ar-ok">✔ معيار القبول: ${esc(step.accept_criteria)}</div>` : ""}
                   ${step.inspection_method ? `<div class="hint">طريقة الفحص: ${esc(step.inspection_method)}</div>` : ""}
                   ${step.inspection_repeat ? `<div class="hint">التكرار: ${esc(step.inspection_repeat)}</div>` : ""}
-                  ${step.reject_criteria ? `<div class="ar-bad">✘ معيار الرفض: ${esc(step.reject_criteria)}</div>` : ""}
                   ${step.reject_action ? `<div class="ar-bad">↩ الإجراء عند الرفض: ${esc(step.reject_action)}</div>` : ""}
                 </div>
               ` : ""}
-              ${step.ppe_notes ? `<div class="hint">⚠️ السيفتي: ${esc(step.ppe_notes)}</div>` : ""}
               ${step.responsible_role ? `<div class="hint">المسؤول: <b>${stepRoleLabel(step.responsible_role)}</b></div>` : ""}
               ${step.spec_value ? `<div class="hint">مواصفة فنية: <b>${esc(step.spec_value)}</b></div>` : ""}
               ${step.defect_code ? `<div class="hint">كود العيب: <code>${esc(step.defect_code)}</code></div>` : ""}
-              ${step.video_url ? `
-                <a class="video-link" href="${esc(step.video_url)}" target="_blank" rel="noopener">▶️ فيديو الفحص / التجميع</a>
-              ` : ""}
             </div>
           `;
           stageEl.appendChild(stepEl);
