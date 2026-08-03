@@ -3,13 +3,20 @@
 // =====================================================================
 const DB = {
   // ---------- SOPs ----------
-  async listSops({ search = "", status = "" } = {}) {
+  async listSops({ search = "", status = "", station = "" } = {}) {
     let q = supabaseClient.from("sops").select("*").order("updated_at", { ascending: false });
     if (status) q = q.eq("status", status);
+    if (station) q = q.eq("station", station);
     if (search) q = q.or(`title.ilike.%${search}%,title_ar.ilike.%${search}%,code.ilike.%${search}%`);
     const { data, error } = await q;
     if (error) throw error;
     return data;
+  },
+
+  async listDistinctLines() {
+    const { data, error } = await supabaseClient.from("sops").select("station").not("station", "is", null);
+    if (error) throw error;
+    return [...new Set(data.map(r => r.station).filter(Boolean))].sort();
   },
 
   async getSopFull(sopId) {
