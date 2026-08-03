@@ -405,60 +405,51 @@ const App = {
     }
 
     // 5-6) خطوات التشغيل + الفحص
-    if (!sop.stages.length) {
-      main.insertAdjacentHTML("beforeend", `<div class="empty-state">لا توجد مراحل مضافة بعد.</div>`);
+    const allSteps = (sop.stages || []).flatMap(s => s.steps || []);
+    if (!allSteps.length) {
+      main.insertAdjacentHTML("beforeend", `<div class="empty-state">لا توجد خطوات مضافة بعد.</div>`);
     } else {
       main.insertAdjacentHTML("beforeend", `<h2 class="section-title">خطوات التشغيل</h2>`);
-      sop.stages.forEach((stage, sIdx) => {
-        const stageEl = document.createElement("div");
-        stageEl.className = "stage";
-        stageEl.innerHTML = `
-          <div class="stage-title">
-            <div class="stage-num">${sIdx + 1}</div>
-            <div><h2>${esc(stage.title_ar || stage.title)}</h2>
-            ${stage.description ? `<div class="stage-desc">${esc(stage.description)}</div>` : ""}</div>
+      const stepsWrapEl = document.createElement("div");
+      allSteps.forEach((step, stIdx) => {
+        const stepEl = document.createElement("div");
+        stepEl.className = "step-card" + (step.is_critical ? " step-critical" : "");
+        stepEl.innerHTML = `
+          <div class="step-idx">${stIdx + 1}</div>
+          <div class="step-body">
+            <h3>${esc(step.title_ar || step.title)} ${step.is_critical ? '<span class="badge critical">حرجة</span>' : ""}</h3>
+            ${step.requirements && step.requirements.length ? `
+              <div class="hint"><b>المعدات والآلات المستخدمة:</b></div>
+              <ul class="req-list">${step.requirements.map(r => `<li>${esc(r)}</li>`).join("")}</ul>
+            ` : ""}
+            ${sop.safety_notes ? `<div class="hint">⚠️ مهمات وإجراءات الوقاية: ${esc(sop.safety_notes)}</div>` : ""}
+            ${step.description ? `<div class="step-desc">${esc(step.description)}</div>` : ""}
+            ${step.images && step.images.length ? `
+              <div class="step-images">
+                ${step.images.map(img => `
+                  <figure>
+                    <img src="${esc(img.image_url)}" loading="lazy"/>
+                    ${img.caption ? `<figcaption>${esc(img.caption)}</figcaption>` : ""}
+                  </figure>
+                `).join("")}
+              </div>
+            ` : ""}
+            ${(step.accept_criteria || step.inspection_method || step.inspection_repeat || step.reject_action) ? `
+              <div class="accept-reject">
+                ${step.accept_criteria ? `<div class="ar-ok">✔ معيار القبول: ${esc(step.accept_criteria)}</div>` : ""}
+                ${step.inspection_method ? `<div class="hint">طريقة الفحص: ${esc(step.inspection_method)}</div>` : ""}
+                ${step.inspection_repeat ? `<div class="hint">التكرار: ${esc(step.inspection_repeat)}</div>` : ""}
+                ${step.reject_action ? `<div class="ar-bad">↩ الإجراء عند الرفض: ${esc(step.reject_action)}</div>` : ""}
+              </div>
+            ` : ""}
+            ${step.responsible_role ? `<div class="hint">المسؤول: <b>${stepRoleLabel(step.responsible_role)}</b></div>` : ""}
+            ${step.spec_value ? `<div class="hint">مواصفة فنية: <b>${esc(step.spec_value)}</b></div>` : ""}
+            ${step.defect_code ? `<div class="hint">كود العيب: <code>${esc(step.defect_code)}</code></div>` : ""}
           </div>
         `;
-        stage.steps.forEach((step, stIdx) => {
-          const stepEl = document.createElement("div");
-          stepEl.className = "step-card" + (step.is_critical ? " step-critical" : "");
-          stepEl.innerHTML = `
-            <div class="step-idx">${stIdx + 1}</div>
-            <div class="step-body">
-              <h3>${esc(step.title_ar || step.title)} ${step.is_critical ? '<span class="badge critical">حرجة</span>' : ""}</h3>
-              ${step.requirements && step.requirements.length ? `
-                <div class="hint"><b>المعدات والآلات المستخدمة:</b></div>
-                <ul class="req-list">${step.requirements.map(r => `<li>${esc(r)}</li>`).join("")}</ul>
-              ` : ""}
-              ${step.ppe_notes ? `<div class="hint">⚠️ مهمات وإجراءات الوقاية: ${esc(step.ppe_notes)}</div>` : ""}
-              ${step.description ? `<div class="step-desc">${esc(step.description)}</div>` : ""}
-              ${step.images && step.images.length ? `
-                <div class="step-images">
-                  ${step.images.map(img => `
-                    <figure>
-                      <img src="${esc(img.image_url)}" loading="lazy"/>
-                      ${img.caption ? `<figcaption>${esc(img.caption)}</figcaption>` : ""}
-                    </figure>
-                  `).join("")}
-                </div>
-              ` : ""}
-              ${(step.accept_criteria || step.inspection_method || step.inspection_repeat || step.reject_action) ? `
-                <div class="accept-reject">
-                  ${step.accept_criteria ? `<div class="ar-ok">✔ معيار القبول: ${esc(step.accept_criteria)}</div>` : ""}
-                  ${step.inspection_method ? `<div class="hint">طريقة الفحص: ${esc(step.inspection_method)}</div>` : ""}
-                  ${step.inspection_repeat ? `<div class="hint">التكرار: ${esc(step.inspection_repeat)}</div>` : ""}
-                  ${step.reject_action ? `<div class="ar-bad">↩ الإجراء عند الرفض: ${esc(step.reject_action)}</div>` : ""}
-                </div>
-              ` : ""}
-              ${step.responsible_role ? `<div class="hint">المسؤول: <b>${stepRoleLabel(step.responsible_role)}</b></div>` : ""}
-              ${step.spec_value ? `<div class="hint">مواصفة فنية: <b>${esc(step.spec_value)}</b></div>` : ""}
-              ${step.defect_code ? `<div class="hint">كود العيب: <code>${esc(step.defect_code)}</code></div>` : ""}
-            </div>
-          `;
-          stageEl.appendChild(stepEl);
-        });
-        main.appendChild(stageEl);
+        stepsWrapEl.appendChild(stepEl);
       });
+      main.appendChild(stepsWrapEl);
     }
 
     // 9) المراجع
