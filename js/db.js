@@ -234,4 +234,36 @@ const DB = {
       }
     } catch (_) { /* non-fatal */ }
   },
+
+  // ---------- رفع فيديو للـ SOP مباشرة (فيديو واحد لكل SOP، بديل عن رابط خارجي) ----------
+  async uploadSopVideo(sopId, file) {
+    const ext = file.name.split(".").pop();
+    const path = `${sopId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error: upErr } = await supabaseClient.storage.from("sop-videos").upload(path, file);
+    if (upErr) throw upErr;
+    const { data: pub } = supabaseClient.storage.from("sop-videos").getPublicUrl(path);
+    return pub.publicUrl;
+  },
+
+  // ---------- إعدادات النظام العامة (لوجو الشركة — يتضاف مرة واحدة ويتظهر في كل مكان) ----------
+  async getAppSettings() {
+    const { data, error } = await supabaseClient.from("app_settings").select("*").eq("id", "default").maybeSingle();
+    if (error) throw error;
+    return data || { id: "default", logo_url: null };
+  },
+  async uploadCompanyLogo(file) {
+    const ext = file.name.split(".").pop();
+    const path = `app-logo/logo-${Date.now()}.${ext}`;
+    const { error: upErr } = await supabaseClient.storage.from("sop-images").upload(path, file, { upsert: true });
+    if (upErr) throw upErr;
+    const { data: pub } = supabaseClient.storage.from("sop-images").getPublicUrl(path);
+    const { data: userData } = await supabaseClient.auth.getUser();
+    const { data, error } = await supabaseClient
+      .from("app_settings")
+      .update({ logo_url: pub.publicUrl, updated_by: userData?.user?.id, updated_at: new Date().toISOString() })
+      .eq("id", "default")
+      .select().single();
+    if (error) throw error;
+    return data;
+  },
 };
