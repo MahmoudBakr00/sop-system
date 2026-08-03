@@ -163,7 +163,7 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
   position:relative; overflow:hidden;
 }
 .sop-header::after{
-  content:""; position:absolute; inset:0;
+  content:""; position:absolute; inset:0; pointer-events:none;
   background:repeating-linear-gradient(135deg, rgba(224,145,42,.06) 0 2px, transparent 2px 14px);
 }
 .sop-header .code{font-family:var(--font-mono); color:var(--amber); font-size:12px; letter-spacing:.08em; position:relative;}
@@ -206,7 +206,7 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 .step-images figure{margin:0; width:150px;}
 .step-images img{width:150px; height:110px; object-fit:cover; border-radius:var(--radius); border:1px solid #e4ddc9; display:block;}
 .step-images figcaption{font-size:10.5px; color:var(--ink-dim); margin-top:3px;}
-.sop-video-box{margin-top:10px;}
+.sop-video-box{margin-top:10px; position:relative;}
 .sop-video-player{
   width:100%; max-width:520px; max-height:340px; border-radius:var(--radius);
   border:1px solid #e4ddc9; background:#000; display:block;
@@ -350,6 +350,11 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 .video-row{display:flex; gap:8px; align-items:center;}
 .video-row input{flex:1;}
 .video-upload-status:empty{display:none;}
+
+.card-flow-box{
+  margin-top:10px; padding-top:10px; border-top:1px dashed var(--blueprint-line);
+  overflow-x:auto;
+}
 
 /* ---------- Station flow dashboard (ordered by station_no) ---------- */
 .station-flow{
