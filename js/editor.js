@@ -8,13 +8,29 @@ const Editor = {
     container.innerHTML = `<div class="spinner"></div>`;
     const sop = await DB.getSopFull(sopId);
     container.innerHTML = "";
-    container.appendChild(this.buildSopForm(sop));
-    container.appendChild(this.buildToolsSection(sop));
-    container.appendChild(this.buildReferencesSection(sop));
+    container.appendChild(this.buildHeaderForm(sop));
+
+    // زرار الحفظ الرئيسي — الوحيد اللي بيحدّث رقم الإصدار (Rev.)
+    const saveBar = document.createElement("div");
+    saveBar.className = "save-bar";
+    saveBar.innerHTML = `
+      <button class="btn btn-primary btn-lg" id="master-save-btn">💾 حفظ التعديلات (تحديث الإصدار)</button>
+      <span class="hint">كل التعديلات بتتحفظ فورًا أول ما تدوس "حفظ" في أي قسم، لكن رقم الإصدار (Rev.) مش بيزيد إلا لما تدوس الزرار ده.</span>
+    `;
+    saveBar.querySelector("#master-save-btn").onclick = async () => {
+      const btn = saveBar.querySelector("#master-save-btn");
+      btn.disabled = true;
+      try {
+        await this.bump(sop.id, "حفظ التعديلات");
+        toast("تم حفظ التعديلات وتحديث الإصدار");
+        await this.render(container, sopId);
+      } catch (e) { toast(e.message, true); btn.disabled = false; }
+    };
+    container.appendChild(saveBar);
 
     const stageHead = document.createElement("h2");
     stageHead.className = "section-title";
-    stageHead.textContent = "5) خطوات التشغيل — المراحل والخطوات";
+    stageHead.textContent = "خطوات التشغيل — المراحل والخطوات";
     container.appendChild(stageHead);
 
     const stagesWrap = document.createElement("div");
@@ -29,11 +45,13 @@ const Editor = {
       const stage = await DB.createStage(sop.id, { title: "مرحلة جديدة", title_ar: "مرحلة جديدة" }, sop.stages.length);
       // نضيف أول خطوة على طول عشان تقدر تكتب فيها فورًا من غير خطوة زيادة
       await DB.createStep(stage.id, { title: "خطوة جديدة", title_ar: "خطوة جديدة", requirements: [] }, 0);
-      await this.bump(sop.id, "إضافة مرحلة جديدة");
       await this.render(container, sopId);
     };
     container.appendChild(addStageBtn);
 
+    container.appendChild(this.buildDetailsForm(sop));
+    container.appendChild(this.buildToolsSection(sop));
+    container.appendChild(this.buildReferencesSection(sop));
     container.appendChild(this.buildRevisionHistory(sop));
   },
 
@@ -47,15 +65,15 @@ const Editor = {
     }
   },
 
-  buildSopForm(sop) {
+  buildHeaderForm(sop) {
     const card = document.createElement("div");
     card.className = "form-card";
     const fmtDate = (d) => d ? new Date(d).toLocaleDateString("ar-EG") : "-";
     card.innerHTML = `
-      <h2>1) البيانات الأساسية (Header)</h2>
+      <h2>البيانات الأساسية</h2>
       <div class="field-row">
-        <div class="field"><label>رقم/كود المستند (يتولّد تلقائيًا من اسم المحطة)</label>
-          <input id="f-code" value="${attr(sop.code || "— هيتولّد بعد ما تحفظ اسم المحطة —")}" disabled/>
+        <div class="field"><label>رقم/كود المستند (يتولّد تلقائيًا من اسم الخط)</label>
+          <input id="f-code" value="${attr(sop.code || "— هيتولّد بعد ما تحفظ اسم الخط —")}" disabled/>
         </div>
         <div class="field"><label>الحالة</label>
           <select id="f-status" ${Auth.isAdmin() ? "" : "disabled"}>
@@ -69,38 +87,54 @@ const Editor = {
         <div class="field"><label>العنوان (عربي)</label><input id="f-title-ar" value="${attr(sop.title_ar)}"/></div>
         <div class="field"><label>Title (English)</label><input id="f-title" value="${attr(sop.title)}"/></div>
       </div>
-      <div class="field-row">
-        <div class="field"><label>خط الإنتاج / الخط</label><input id="f-line" value="${attr(sop.product_line)}"/></div>
-        <div class="field"><label>المحطة / المكان</label><input id="f-station" value="${attr(sop.station)}" placeholder="مثال: خط التجميع النهائي"/></div>
-      </div>
+      <div class="field"><label>الخط</label><input id="f-station" value="${attr(sop.station)}" placeholder="مثال: التجميع النهائي"/></div>
       <div class="field-row">
         <div class="field"><label>عدد مرات الفحص</label><input id="f-freq" value="${attr(sop.inspection_frequency)}" placeholder="مثال: طبقًا لخطط العينات"/></div>
         <div class="field"><label>بيئة الفحص</label><input id="f-env" value="${attr(sop.inspection_environment)}" placeholder="مثال: الفحص على بعد 400 مم من اللوحة"/></div>
       </div>
-      <div class="field hint">رقم الإصدار الحالي (Revision No.): <b>v${sop.version || 1}</b> — بيزيد تلقائيًا مع كل حفظ.</div>
+      <div class="field hint">رقم الإصدار الحالي (Revision No.): <b>v${sop.version || 1}</b> — بيزيد بس لما تدوس زرار "💾 حفظ التعديلات" تحت.</div>
+
+      <div class="field">
+        <label>فيديو الـ SOP (طريقة الفحص أو التجميع — فيديو واحد للـ SOP كله)</label>
+        <div class="video-row">
+          <input id="f-video" value="${attr(sop.video_url)}" placeholder="الصق رابط فيديو (يوتيوب / درايف)..."/>
+          <label class="btn btn-sm btn-ghost">
+            📹 رفع فيديو <input type="file" accept="video/*" id="sop-video-file" style="display:none;"/>
+          </label>
+        </div>
+        <p class="hint" id="sop-video-status"></p>
+        ${sop.video_url ? `<a href="${attr(sop.video_url)}" target="_blank" rel="noopener" class="hint">▶️ الفيديو الحالي</a>` : ""}
+      </div>
 
       <div class="identity-box">
         <div>📝 <b>أنشأ بواسطة:</b> ${esc(sop.created_by_name || "-")} — ${fmtDate(sop.created_at)}</div>
         <div>✏️ <b>آخر تعديل بواسطة:</b> ${esc(sop.updated_by_name || "-")} — ${fmtDate(sop.updated_at)}</div>
-        <div>✅ <b>اعتماد:</b> ${sop.approved_by ? `${esc(sop.approved_by)} — ${esc(sop.approved_at)}` : "لسه ما اتعمدتش"}
+        <div>✅ <b>اعتماد:</b> ${sop.approved_by ? `${esc(sop.approved_by)} — ${fmtDate(sop.approved_at)}` : "لسه ما اتعمدتش"}
           ${Auth.isAdmin() ? `<button class="btn btn-sm btn-primary" id="approve-btn" style="margin-inline-start:8px;">${sop.approved_by ? "إعادة الاعتماد" : "✅ اعتماد الـ SOP"}</button>` : ""}
         </div>
         <p class="hint" style="margin:6px 0 0;">الاسم والتاريخ بياخدهم النظام تلقائيًا من حساب المستخدم المسجّل دخول — مفيش إدخال يدوي.</p>
       </div>
 
-      <h2 style="margin-top:20px;">2) الهدف والنطاق (Purpose &amp; Scope)</h2>
-      <div class="field"><label>الهدف من الإجراء (Purpose)</label><textarea id="f-desc">${esc(sop.description)}</textarea></div>
-      <div class="field"><label>النطاق — المنتجات/المحطات اللي بيتطبق عليها (Scope)</label><textarea id="f-scope">${esc(sop.scope)}</textarea></div>
-
-      <h2 style="margin-top:20px;">7) السلامة (Safety precautions)</h2>
-      <div class="field"><label>تحذيرات عامة ومعدات الحماية الشخصية المطلوبة (PPE)</label><textarea id="f-safety" placeholder="مثال: نظارة واقية، قفازات مقاومة للحرارة، حذاء أمان...">${esc(sop.safety_notes)}</textarea></div>
-
-      <h2 style="margin-top:20px;">8) التعامل مع الانحرافات (Deviation handling)</h2>
-      <div class="field"><label>الإجراء العام عند حدوث عيب أو توقف خط (ممكن يتربط بنظام الـ Andon)</label><textarea id="f-deviation" placeholder="مثال: أوقف الخط فورًا، بلّغ المشرف، افتح تذكرة في نظام تتبع العيوب...">${esc(sop.deviation_handling)}</textarea></div>
-
-      <button class="btn btn-primary" id="save-sop-btn">حفظ بيانات الـ SOP</button>
+      <button class="btn" id="save-header-btn">حفظ بيانات الخط والعنوان</button>
     `;
     wireAutoTranslate(card.querySelector("#f-title-ar"), card.querySelector("#f-title"));
+
+    card.querySelector("#sop-video-file").addEventListener("change", async (ev) => {
+      const file = ev.target.files[0];
+      if (!file) return;
+      const statusEl = card.querySelector("#sop-video-status");
+      const videoInput = card.querySelector("#f-video");
+      statusEl.textContent = "جاري رفع الفيديو...";
+      try {
+        const url = await DB.uploadSopVideo(sop.id, file);
+        videoInput.value = url;
+        statusEl.textContent = "تم رفع الفيديو — متنساش تدوس \"حفظ\" تحت";
+      } catch (e) {
+        statusEl.textContent = "";
+        toast(e.message, true);
+      }
+      ev.target.value = "";
+    });
 
     const approveBtn = card.querySelector("#approve-btn");
     if (approveBtn) {
@@ -116,30 +150,49 @@ const Editor = {
       };
     }
 
-    card.querySelector("#save-sop-btn").onclick = async () => {
+    card.querySelector("#save-header-btn").onclick = async () => {
       const payload = {
         status: Auth.isAdmin() ? card.querySelector("#f-status").value : sop.status,
         title_ar: card.querySelector("#f-title-ar").value.trim(),
         title: card.querySelector("#f-title").value.trim() || card.querySelector("#f-title-ar").value.trim(),
-        product_line: card.querySelector("#f-line").value.trim(),
         station: card.querySelector("#f-station").value.trim(),
         inspection_frequency: card.querySelector("#f-freq").value.trim() || null,
         inspection_environment: card.querySelector("#f-env").value.trim() || null,
-        description: card.querySelector("#f-desc").value.trim(),
-        scope: card.querySelector("#f-scope").value.trim(),
+        video_url: card.querySelector("#f-video").value.trim() || null,
+      };
+      try {
+        const updated = await DB.updateSop(sop.id, payload);
+        Object.assign(sop, updated);
+        // لو الكود لسه مش متولّد وفيه اسم خط، ولّده دلوقتي
+        if (!sop.code && payload.station) {
+          const newCode = await DB.generateSopCode(sop.id, payload.station);
+          sop.code = newCode;
+          card.querySelector("#f-code").value = newCode;
+        }
+        toast("تم الحفظ");
+      } catch (e) { toast(e.message, true); }
+    };
+    return card;
+  },
+
+  // ---------------- تفاصيل إضافية: السلامة/الانحرافات (بعد الخطوات) ----------------
+  buildDetailsForm(sop) {
+    const card = document.createElement("div");
+    card.className = "form-card";
+    card.innerHTML = `
+      <h2>تفاصيل إضافية</h2>
+      <div class="field"><label>السلامة — تحذيرات عامة ومعدات الحماية الشخصية المطلوبة (PPE)</label><textarea id="f-safety" placeholder="مثال: نظارة واقية، قفازات مقاومة للحرارة، حذاء أمان...">${esc(sop.safety_notes)}</textarea></div>
+      <div class="field"><label>التعامل مع الانحرافات — الإجراء العام عند حدوث عيب أو توقف خط (ممكن يتربط بنظام الـ Andon)</label><textarea id="f-deviation" placeholder="مثال: أوقف الخط فورًا، بلّغ المشرف، افتح تذكرة في نظام تتبع العيوب...">${esc(sop.deviation_handling)}</textarea></div>
+      <button class="btn" id="save-details-btn">حفظ التفاصيل الإضافية</button>
+    `;
+    card.querySelector("#save-details-btn").onclick = async () => {
+      const payload = {
         safety_notes: card.querySelector("#f-safety").value.trim(),
         deviation_handling: card.querySelector("#f-deviation").value.trim(),
       };
       try {
         const updated = await DB.updateSop(sop.id, payload);
         Object.assign(sop, updated);
-        // لو الكود لسه مش متولّد وفيه اسم محطة، ولّده دلوقتي
-        if (!sop.code && payload.station) {
-          const newCode = await DB.generateSopCode(sop.id, payload.station);
-          sop.code = newCode;
-          card.querySelector("#f-code").value = newCode;
-        }
-        await this.bump(sop.id, "تعديل البيانات الأساسية / الهدف / السلامة / الانحرافات");
         toast("تم الحفظ");
       } catch (e) { toast(e.message, true); }
     };
@@ -181,7 +234,6 @@ const Editor = {
           const id = btn.closest(".list-row").dataset.id;
           await DB.deleteTool(id);
           sop.tools = sop.tools.filter(t => t.id !== id);
-          await this.bump(sop.id, "حذف أداة/مادة");
           paint();
         };
       });
@@ -196,7 +248,6 @@ const Editor = {
         sop.tools = [...(sop.tools || []), t];
         card.querySelector("#tool-name").value = "";
         card.querySelector("#tool-spec").value = "";
-        await this.bump(sop.id, `إضافة أداة/مادة: ${name}`);
         paint();
       } catch (e) { toast(e.message, true); }
     };
@@ -232,7 +283,6 @@ const Editor = {
           const id = btn.closest(".list-row").dataset.id;
           await DB.deleteReference(id);
           sop.references = sop.references.filter(r => r.id !== id);
-          await this.bump(sop.id, "حذف مرجع");
           paint();
         };
       });
@@ -246,7 +296,6 @@ const Editor = {
         sop.references = [...(sop.references || []), r];
         card.querySelector("#ref-text").value = "";
         card.querySelector("#ref-url").value = "";
-        await this.bump(sop.id, `إضافة مرجع: ${ref_text}`);
         paint();
       } catch (e) { toast(e.message, true); }
     };
@@ -284,11 +333,12 @@ const Editor = {
       el.className = "editor-stage";
       el.innerHTML = `
         <div class="field-row" style="align-items:flex-end;">
+          <div class="field" style="max-width:130px;"><label>رقم المحطة (فريد)</label><input class="st-station-no" type="number" min="1" value="${stage.station_no ?? ""}" placeholder="مثال: 1"/></div>
           <div class="field"><label>عنوان المرحلة ${sIdx + 1} (عربي)</label><input class="st-title-ar" value="${attr(stage.title_ar)}"/></div>
           <div class="field"><label>Title (English)</label><input class="st-title" value="${attr(stage.title)}"/></div>
         </div>
         <div class="editor-toolbar">
-          <button class="btn btn-sm save-stage">حفظ عنوان المرحلة</button>
+          <button class="btn btn-sm save-stage">حفظ المرحلة</button>
           <button class="btn btn-sm btn-ghost move-up" ${sIdx === 0 ? "disabled" : ""}>▲ لأعلى</button>
           <button class="btn btn-sm btn-ghost move-down" ${sIdx === sop.stages.length - 1 ? "disabled" : ""}>▼ لأسفل</button>
           <button class="btn btn-sm btn-danger del-stage">حذف المرحلة</button>
@@ -300,36 +350,43 @@ const Editor = {
       wrap.appendChild(el);
 
       el.querySelector(".save-stage").onclick = async () => {
-        await DB.updateStage(stage.id, {
-          title_ar: el.querySelector(".st-title-ar").value.trim(),
-          title: el.querySelector(".st-title").value.trim(),
-        });
-        await this.bump(sop.id, `تعديل مرحلة: ${el.querySelector(".st-title-ar").value.trim()}`);
-        toast("تم حفظ عنوان المرحلة");
+        const stationNoRaw = el.querySelector(".st-station-no").value.trim();
+        const stationNo = stationNoRaw === "" ? null : Number(stationNoRaw);
+        try {
+          await DB.updateStage(stage.id, {
+            title_ar: el.querySelector(".st-title-ar").value.trim(),
+            title: el.querySelector(".st-title").value.trim(),
+            station_no: stationNo,
+          });
+          stage.station_no = stationNo;
+          toast("تم حفظ المرحلة");
+        } catch (e) {
+          if (String(e.message).includes("uq_stage_station_no") || e.code === "23505") {
+            toast("رقم المحطة ده مستخدم قبل كده في نفس الـ SOP — اختار رقم تاني", true);
+          } else {
+            toast(e.message, true);
+          }
+        }
       };
       el.querySelector(".del-stage").onclick = async () => {
         if (!confirm("حذف المرحلة وكل خطواتها؟")) return;
         await DB.deleteStage(stage.id);
-        await this.bump(sop.id, "حذف مرحلة");
         await this.render(wrap.parentElement, sop.id);
       };
       el.querySelector(".move-up").onclick = async () => {
         const ids = sop.stages.map(s => s.id);
         [ids[sIdx - 1], ids[sIdx]] = [ids[sIdx], ids[sIdx - 1]];
         await DB.reorderStages(ids);
-        await this.bump(sop.id, "إعادة ترتيب المراحل");
         await this.render(wrap.parentElement, sop.id);
       };
       el.querySelector(".move-down").onclick = async () => {
         const ids = sop.stages.map(s => s.id);
         [ids[sIdx + 1], ids[sIdx]] = [ids[sIdx], ids[sIdx + 1]];
         await DB.reorderStages(ids);
-        await this.bump(sop.id, "إعادة ترتيب المراحل");
         await this.render(wrap.parentElement, sop.id);
       };
       el.querySelector(".add-step").onclick = async () => {
         await DB.createStep(stage.id, { title: "خطوة جديدة", title_ar: "خطوة جديدة", requirements: [] }, stage.steps.length);
-        await this.bump(sop.id, "إضافة خطوة جديدة");
         await this.render(wrap.parentElement, sop.id);
       };
 
@@ -351,12 +408,15 @@ const Editor = {
         <div class="field"><label>Title (English) — تلقائي</label><input class="sp-title" value="${attr(step.title)}"/></div>
       </div>
 
-      <div class="field">
-        <label>2) المعدات والآلات المستخدمة — اكتب واضغط Enter لإضافة كل عنصر</label>
-        <div class="chip-input" data-reqs='${JSON.stringify(step.requirements || [])}'>
-          ${(step.requirements || []).map((r, i) => `<span class="chip" data-i="${i}">${esc(r)}<button type="button">×</button></span>`).join("")}
-          <input class="req-input" placeholder="أضف أداة أو آلة..." style="border:none; flex:1; min-width:120px; padding:4px;"/>
+      <div class="field-row">
+        <div class="field">
+          <label>2) المعدات والآلات المستخدمة — اكتب واضغط Enter لإضافة كل عنصر</label>
+          <div class="chip-input" data-reqs='${JSON.stringify(step.requirements || [])}'>
+            ${(step.requirements || []).map((r, i) => `<span class="chip" data-i="${i}">${esc(r)}<button type="button">×</button></span>`).join("")}
+            <input class="req-input" placeholder="أضف أداة أو آلة..." style="border:none; flex:1; min-width:120px; padding:4px;"/>
+          </div>
         </div>
+        <div class="field"><label>مهمات وإجراءات الوقاية (السيفتي)</label><input class="sp-ppe" value="${attr(step.ppe_notes)}" placeholder="مثال: افصل الكهرباء قبل الفتح، ارتدِ نظارة واقية"/></div>
       </div>
 
       <div class="field"><label>3) شرح الخطوة</label><textarea class="sp-desc">${esc(step.description)}</textarea></div>
@@ -382,10 +442,8 @@ const Editor = {
       </div>
       <div class="field-row">
         <div class="field"><label>7) التكرار</label><input class="sp-repeat" value="${attr(step.inspection_repeat)}" placeholder="مثال: كل قطعة / كل ساعة / عينة عشوائية"/></div>
-        <div class="field"><label>8) معيار الرفض</label><input class="sp-reject" value="${attr(step.reject_criteria)}" placeholder="مثال: صوت طرقعة، فجوة أكبر من 1.5mm"/></div>
+        <div class="field"><label>8) الإجراء عند الرفض</label><input class="sp-reject-action" value="${attr(step.reject_action)}" placeholder="مثال: أوقف المحطة، ضع بطاقة رفض، بلّغ المشرف"/></div>
       </div>
-      <div class="field"><label>9) الإجراء عند الرفض</label><textarea class="sp-reject-action" placeholder="مثال: أوقف المحطة، ضع بطاقة رفض، بلّغ المشرف">${esc(step.reject_action)}</textarea></div>
-      <div class="field"><label>10) السيفتي</label><input class="sp-ppe" value="${attr(step.ppe_notes)}" placeholder="مثال: افصل الكهرباء قبل الفتح، ارتدِ نظارة واقية"/></div>
 
       <details class="editor-extra">
         <summary>بيانات إضافية (اختياري)</summary>
@@ -400,10 +458,6 @@ const Editor = {
         <div class="field-row">
           <div class="field"><label>كود العيب المرتبط</label><input class="sp-defect" value="${attr(step.defect_code)}" placeholder="مثال: DEF-COND-014"/></div>
           <div class="field"><label><input type="checkbox" class="sp-critical" ${step.is_critical ? "checked" : ""}/> خطوة حرجة (وقفة إلزامية)</label></div>
-        </div>
-        <div class="field">
-          <label>رابط فيديو (يوتيوب / درايف) لطريقة الفحص أو التجميع</label>
-          <input class="sp-video" value="${attr(step.video_url)}" placeholder="https://..."/>
         </div>
       </details>
 
@@ -446,7 +500,6 @@ const Editor = {
         const thumb = btn.closest(".img-thumb");
         if (!confirm("حذف الصورة؟")) return;
         await DB.deleteStepImage(thumb.dataset.imgId, thumb.dataset.url);
-        await Editor.bump(sop.id, "حذف صورة من خطوة");
         thumb.remove();
       };
     });
@@ -466,11 +519,9 @@ const Editor = {
           thumb.querySelector(".rm-img").onclick = async () => {
             if (!confirm("حذف الصورة؟")) return;
             await DB.deleteStepImage(img.id, img.image_url);
-            await Editor.bump(sop.id, "حذف صورة من خطوة");
             thumb.remove();
           };
           uploadRow.insertBefore(thumb, uploadRow.lastElementChild);
-          await Editor.bump(sop.id, `رفع صورة لخطوة: ${step.title_ar || step.title}`);
         } catch (e) { toast(e.message, true); }
       }
       ev.target.value = "";
@@ -482,14 +533,12 @@ const Editor = {
           title_ar: el.querySelector(".sp-title-ar").value.trim(),
           title: el.querySelector(".sp-title").value.trim(),
           description: el.querySelector(".sp-desc").value.trim(),
-          video_url: el.querySelector(".sp-video").value.trim() || null,
           requirements: reqs,
           responsible_role: el.querySelector(".sp-role").value || null,
           spec_value: el.querySelector(".sp-spec").value.trim() || null,
           accept_criteria: el.querySelector(".sp-accept").value.trim() || null,
           inspection_method: el.querySelector(".sp-method").value.trim() || null,
           inspection_repeat: el.querySelector(".sp-repeat").value.trim() || null,
-          reject_criteria: el.querySelector(".sp-reject").value.trim() || null,
           reject_action: el.querySelector(".sp-reject-action").value.trim() || null,
           defect_code: el.querySelector(".sp-defect").value.trim() || null,
           ppe_notes: el.querySelector(".sp-ppe").value.trim() || null,
@@ -497,28 +546,24 @@ const Editor = {
         };
         await DB.updateStep(step.id, payload);
         Object.assign(step, payload);
-        await Editor.bump(sop.id, `تعديل خطوة: ${payload.title_ar || payload.title}`);
         toast("تم حفظ الخطوة");
       } catch (e) { toast(e.message, true); }
     };
     el.querySelector(".del-step").onclick = async () => {
       if (!confirm("حذف الخطوة؟")) return;
       await DB.deleteStep(step.id);
-      await Editor.bump(sop.id, "حذف خطوة");
       await App.navigate(`#/sop/${sop.id}/edit`, true);
     };
     el.querySelector(".move-up").onclick = async () => {
       const ids = stage.steps.map(s => s.id);
       [ids[stIdx - 1], ids[stIdx]] = [ids[stIdx], ids[stIdx - 1]];
       await DB.reorderSteps(ids);
-      await Editor.bump(sop.id, "إعادة ترتيب خطوات");
       await App.navigate(`#/sop/${sop.id}/edit`, true);
     };
     el.querySelector(".move-down").onclick = async () => {
       const ids = stage.steps.map(s => s.id);
       [ids[stIdx + 1], ids[stIdx]] = [ids[stIdx], ids[stIdx + 1]];
       await DB.reorderSteps(ids);
-      await Editor.bump(sop.id, "إعادة ترتيب خطوات");
       await App.navigate(`#/sop/${sop.id}/edit`, true);
     };
   },
