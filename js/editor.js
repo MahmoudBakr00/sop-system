@@ -103,7 +103,13 @@ const Editor = {
           </label>
         </div>
         <p class="hint" id="sop-video-status"></p>
-        ${sop.video_url ? `<a href="${attr(sop.video_url)}" target="_blank" rel="noopener" class="hint">▶️ الفيديو الحالي</a>` : ""}
+        ${sop.video_url ? `
+          <div class="sop-video-box">
+            <video controls preload="metadata" class="sop-video-player">
+              <source src="${attr(sop.video_url)}"/>
+            </video>
+          </div>
+        ` : ""}
       </div>
 
       <div class="identity-box">
