@@ -7,6 +7,7 @@ const Editor = {
   async render(container, sopId) {
     container.innerHTML = `<div class="spinner"></div>`;
     const sop = await DB.getSopFull(sopId);
+    await this.ensureSingleStage(sop);
     container.innerHTML = "";
     container.appendChild(this.buildHeaderForm(sop));
 
@@ -30,24 +31,23 @@ const Editor = {
 
     const stageHead = document.createElement("h2");
     stageHead.className = "section-title";
-    stageHead.textContent = "خطوات التشغيل — المراحل والخطوات";
+    stageHead.textContent = "خطوات التشغيل";
     container.appendChild(stageHead);
 
-    const stagesWrap = document.createElement("div");
-    stagesWrap.id = "editor-stages";
-    container.appendChild(stagesWrap);
-    this.renderStages(stagesWrap, sop);
+    const stepsContainerWrap = document.createElement("div");
+    stepsContainerWrap.id = "editor-stages";
+    container.appendChild(stepsContainerWrap);
+    this.renderSteps(stepsContainerWrap, sop);
 
-    const addStageBtn = document.createElement("button");
-    addStageBtn.className = "btn btn-primary";
-    addStageBtn.textContent = "+ إضافة مرحلة جديدة";
-    addStageBtn.onclick = async () => {
-      const stage = await DB.createStage(sop.id, { title: "مرحلة جديدة", title_ar: "مرحلة جديدة" }, sop.stages.length);
-      // نضيف أول خطوة على طول عشان تقدر تكتب فيها فورًا من غير خطوة زيادة
-      await DB.createStep(stage.id, { title: "خطوة جديدة", title_ar: "خطوة جديدة", requirements: [] }, 0);
+    const addStepBtn = document.createElement("button");
+    addStepBtn.className = "btn btn-primary";
+    addStepBtn.textContent = "+ إضافة خطوة جديدة";
+    addStepBtn.onclick = async () => {
+      const stage = sop.stages[0];
+      await DB.createStep(stage.id, { title: "خطوة جديدة", title_ar: "خطوة جديدة", requirements: [] }, stage.steps.length);
       await this.render(container, sopId);
     };
-    container.appendChild(addStageBtn);
+    container.appendChild(addStepBtn);
 
     container.appendChild(this.buildDetailsForm(sop));
     container.appendChild(this.buildToolsSection(sop));
@@ -109,6 +109,11 @@ const Editor = {
         ${sop.video_url ? videoBoxHtml(sop.video_url) : ""}
       </div>
 
+      <div class="field">
+        <label>معدات وإجراءات السيفتي (تتكتب مرة واحدة وتتكرر تلقائيًا جنب كل خطوة في التقرير)</label>
+        <textarea id="f-safety" placeholder="مثال: نظارة واقية، قفازات مقاومة للحرارة، حذاء أمان...">${esc(sop.safety_notes)}</textarea>
+      </div>
+
       <div class="identity-box">
         <div>📝 <b>أنشأ بواسطة:</b> ${esc(sop.created_by_name || "-")} — ${fmtDate(sop.created_at)}</div>
         <div>✏️ <b>آخر تعديل بواسطة:</b> ${esc(sop.updated_by_name || "-")} — ${fmtDate(sop.updated_at)}</div>
@@ -165,6 +170,7 @@ const Editor = {
         inspection_frequency: card.querySelector("#f-freq").value.trim() || null,
         inspection_environment: card.querySelector("#f-env").value.trim() || null,
         video_url: card.querySelector("#f-video").value.trim() || null,
+        safety_notes: card.querySelector("#f-safety").value.trim(),
       };
       try {
         const updated = await DB.updateSop(sop.id, payload);
@@ -193,13 +199,11 @@ const Editor = {
     card.className = "form-card";
     card.innerHTML = `
       <h2>تفاصيل إضافية</h2>
-      <div class="field"><label>السلامة — تحذيرات عامة ومعدات الحماية الشخصية المطلوبة (PPE)</label><textarea id="f-safety" placeholder="مثال: نظارة واقية، قفازات مقاومة للحرارة، حذاء أمان...">${esc(sop.safety_notes)}</textarea></div>
       <div class="field"><label>التعامل مع الانحرافات — الإجراء العام عند حدوث عيب أو توقف خط (ممكن يتربط بنظام الـ Andon)</label><textarea id="f-deviation" placeholder="مثال: أوقف الخط فورًا، بلّغ المشرف، افتح تذكرة في نظام تتبع العيوب...">${esc(sop.deviation_handling)}</textarea></div>
       <button class="btn" id="save-details-btn">حفظ التفاصيل الإضافية</button>
     `;
     card.querySelector("#save-details-btn").onclick = async () => {
       const payload = {
-        safety_notes: card.querySelector("#f-safety").value.trim(),
         deviation_handling: card.querySelector("#f-deviation").value.trim(),
       };
       try {
@@ -338,64 +342,37 @@ const Editor = {
     return card;
   },
 
-  renderStages(wrap, sop) {
+  // يتأكد إن الـ SOP عنده "حاوية" واحدة بس للخطوات (شغالة تحت الستار كـ stage واحد)
+  // — لو فيه أكتر من مرحلة من بيانات قديمة، بيدمجهم كلهم في واحدة من غير ما يفقد أي خطوة
+  async ensureSingleStage(sop) {
+    if (!sop.stages.length) {
+      const stage = await DB.createStage(sop.id, { title: "خطوات", title_ar: "خطوات" }, 0);
+      stage.steps = [];
+      sop.stages = [stage];
+      return;
+    }
+    if (sop.stages.length === 1) return;
+    const primary = sop.stages[0];
+    const rest = sop.stages.slice(1);
+    let order = primary.steps.length;
+    for (const stage of rest) {
+      for (const step of stage.steps) {
+        await DB.updateStep(step.id, { stage_id: primary.id, order_index: order++ });
+        primary.steps.push(step);
+      }
+      await DB.deleteStage(stage.id);
+    }
+    sop.stages = [primary];
+  },
+
+  renderSteps(wrap, sop) {
     wrap.innerHTML = "";
-    sop.stages.forEach((stage, sIdx) => {
-      const el = document.createElement("div");
-      el.className = "editor-stage";
-      el.innerHTML = `
-        <div class="field-row" style="align-items:flex-end;">
-          <div class="field"><label>عنوان المرحلة ${sIdx + 1} (عربي)</label><input class="st-title-ar" value="${attr(stage.title_ar)}"/></div>
-          <div class="field"><label>Title (English)</label><input class="st-title" value="${attr(stage.title)}"/></div>
-        </div>
-        <div class="editor-toolbar">
-          <button class="btn btn-sm save-stage">حفظ المرحلة</button>
-          <button class="btn btn-sm btn-ghost move-up" ${sIdx === 0 ? "disabled" : ""}>▲ لأعلى</button>
-          <button class="btn btn-sm btn-ghost move-down" ${sIdx === sop.stages.length - 1 ? "disabled" : ""}>▼ لأسفل</button>
-          <button class="btn btn-sm btn-danger del-stage">حذف المرحلة</button>
-        </div>
-        <div class="steps-wrap"></div>
-        <button class="btn btn-sm add-step">+ إضافة خطوة</button>
-      `;
-      wireAutoTranslate(el.querySelector(".st-title-ar"), el.querySelector(".st-title"));
-      wrap.appendChild(el);
-
-      el.querySelector(".save-stage").onclick = async () => {
-        try {
-          await DB.updateStage(stage.id, {
-            title_ar: el.querySelector(".st-title-ar").value.trim(),
-            title: el.querySelector(".st-title").value.trim(),
-          });
-          toast("تم حفظ المرحلة");
-        } catch (e) {
-          toast(e.message, true);
-        }
-      };
-      el.querySelector(".del-stage").onclick = async () => {
-        if (!confirm("حذف المرحلة وكل خطواتها؟")) return;
-        await DB.deleteStage(stage.id);
-        await this.render(wrap.parentElement, sop.id);
-      };
-      el.querySelector(".move-up").onclick = async () => {
-        const ids = sop.stages.map(s => s.id);
-        [ids[sIdx - 1], ids[sIdx]] = [ids[sIdx], ids[sIdx - 1]];
-        await DB.reorderStages(ids);
-        await this.render(wrap.parentElement, sop.id);
-      };
-      el.querySelector(".move-down").onclick = async () => {
-        const ids = sop.stages.map(s => s.id);
-        [ids[sIdx + 1], ids[sIdx]] = [ids[sIdx], ids[sIdx + 1]];
-        await DB.reorderStages(ids);
-        await this.render(wrap.parentElement, sop.id);
-      };
-      el.querySelector(".add-step").onclick = async () => {
-        await DB.createStep(stage.id, { title: "خطوة جديدة", title_ar: "خطوة جديدة", requirements: [] }, stage.steps.length);
-        await this.render(wrap.parentElement, sop.id);
-      };
-
-      const stepsWrap = el.querySelector(".steps-wrap");
-      stage.steps.forEach((step, stIdx) => this.renderStep(stepsWrap, sop, stage, step, stIdx));
-    });
+    const stage = sop.stages[0];
+    if (!stage) return;
+    const stepsWrap = document.createElement("div");
+    stepsWrap.className = "steps-wrap";
+    wrap.appendChild(stepsWrap);
+    stage.steps.forEach((step, stIdx) => this.renderStep(stepsWrap, sop, stage, step, stIdx));
   },
 
   renderStep(wrap, sop, stage, step, stIdx) {
@@ -411,15 +388,13 @@ const Editor = {
         <div class="field"><label>Title (English) — تلقائي</label><input class="sp-title" value="${attr(step.title)}"/></div>
       </div>
 
-      <div class="field-row">
-        <div class="field">
-          <label>2) المعدات والآلات المستخدمة — اكتب واضغط Enter لإضافة كل عنصر</label>
-          <div class="chip-input" data-reqs='${JSON.stringify(step.requirements || [])}'>
-            ${(step.requirements || []).map((r, i) => `<span class="chip" data-i="${i}">${esc(r)}<button type="button">×</button></span>`).join("")}
-            <input class="req-input" placeholder="أضف أداة أو آلة..." style="border:none; flex:1; min-width:120px; padding:4px;"/>
-          </div>
+      <div class="field">
+        <label>2) المعدات والآلات المستخدمة — اكتب واضغط Enter لإضافة كل عنصر</label>
+        <div class="chip-input" data-reqs='${JSON.stringify(step.requirements || [])}'>
+          ${(step.requirements || []).map((r, i) => `<span class="chip" data-i="${i}">${esc(r)}<button type="button">×</button></span>`).join("")}
+          <input class="req-input" placeholder="أضف أداة أو آلة..." style="border:none; flex:1; min-width:120px; padding:4px;"/>
         </div>
-        <div class="field"><label>مهمات وإجراءات الوقاية (السيفتي)</label><input class="sp-ppe" value="${attr(step.ppe_notes)}" placeholder="مثال: افصل الكهرباء قبل الفتح، ارتدِ نظارة واقية"/></div>
+        <p class="hint">معدات وإجراءات السيفتي بتتاخد تلقائيًا من بيانات الـ SOP فوق — مش محتاج تكتبها هنا.</p>
       </div>
 
       <div class="field"><label>3) شرح الخطوة</label><textarea class="sp-desc">${esc(step.description)}</textarea></div>
@@ -544,7 +519,6 @@ const Editor = {
           inspection_repeat: el.querySelector(".sp-repeat").value.trim() || null,
           reject_action: el.querySelector(".sp-reject-action").value.trim() || null,
           defect_code: el.querySelector(".sp-defect").value.trim() || null,
-          ppe_notes: el.querySelector(".sp-ppe").value.trim() || null,
           is_critical: el.querySelector(".sp-critical").checked,
         };
         await DB.updateStep(step.id, payload);
