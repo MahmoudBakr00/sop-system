@@ -206,12 +206,12 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 .step-images figure{margin:0; width:150px;}
 .step-images img{width:150px; height:110px; object-fit:cover; border-radius:var(--radius); border:1px solid #e4ddc9; display:block;}
 .step-images figcaption{font-size:10.5px; color:var(--ink-dim); margin-top:3px;}
-.video-link{
-  display:inline-flex; align-items:center; gap:6px; font-size:12.5px;
-  color:var(--blueprint-800); background:var(--paper-dim); padding:6px 10px;
-  border-radius:var(--radius); border:1px solid #e4ddc9;
+.sop-video-box{margin-top:10px;}
+.sop-video-player{
+  width:100%; max-width:520px; max-height:340px; border-radius:var(--radius);
+  border:1px solid #e4ddc9; background:#000; display:block;
 }
-.video-link:hover{border-color:var(--blueprint-line);}
+.sop-video-box .hint{display:inline-block; margin-top:6px;}
 
 /* ---------- Editor form ---------- */
 .form-card{
