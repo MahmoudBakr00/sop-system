@@ -4,6 +4,43 @@
 // A4 PDF via jsPDF + html2canvas. Video links become a small QR code
 // so the printed sheet can be scanned on the factory floor.
 // =====================================================================
+// يلتقط عنصر الـ HTML كصورة واحدة عالية الدقة، ويقصّه على شكل صفحات A4 (بدون أي
+// اعتماد على نصوص جسPDF الداخلية) — ده اللي بيمنع تشويه الحروف العربية اللي بيحصل
+// مع doc.html()'s autoPaging لإنها بتحاول ترسم نص حقيقي بخط لاتيني افتراضي.
+async function renderPagedPdf({ sheet, orientation = "p", filename, scale = 2 }) {
+  const canvas = await html2canvas(sheet, { scale, useCORS: true, backgroundColor: "#ffffff" });
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "a4", orientation });
+  const margin = 18;
+  const pageW = doc.internal.pageSize.getWidth() - margin * 2;
+  const pageH = doc.internal.pageSize.getHeight() - margin * 2;
+
+  const pxPerPt = canvas.width / pageW;       // px-per-pt عند نفس عرض الصفحة
+  const pageHeightPx = Math.floor(pageH * pxPerPt);
+
+  let renderedPx = 0;
+  let pageIndex = 0;
+  while (renderedPx < canvas.height) {
+    const sliceHeightPx = Math.min(pageHeightPx, canvas.height - renderedPx);
+
+    const pageCanvas = document.createElement("canvas");
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = sliceHeightPx;
+    const ctx = pageCanvas.getContext("2d");
+    ctx.drawImage(canvas, 0, renderedPx, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+
+    const imgData = pageCanvas.toDataURL("image/png");
+    if (pageIndex > 0) doc.addPage();
+    doc.addImage(imgData, "PNG", margin, margin, pageW, sliceHeightPx / pxPerPt);
+
+    renderedPx += sliceHeightPx;
+    pageIndex++;
+  }
+
+  doc.save(filename);
+}
+
 const PdfExport = {
 
   // ---------------- نسخة الجدول (Excel-style): صف لكل خطوة، كل تفصيلة في خانة ----------------
@@ -107,22 +144,12 @@ const PdfExport = {
     await waitForImages(sheet);
 
     if (onProgress) onProgress("جاري إنشاء ملف PDF...");
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
-
-    await new Promise(resolve => {
-      doc.html(sheet, {
-        callback: () => resolve(),
-        x: 0, y: 0,
-        width: 842,               // A4 landscape width in pt
-        windowWidth: 1500,        // px width of sheet
-        autoPaging: "text",
-        html2canvas: { scale: 0.7, useCORS: true },
-      });
+    await renderPagedPdf({
+      sheet,
+      orientation: "l",
+      filename: `${(sop.code || "SOP")}_table-sheet.pdf`,
+      scale: 2,
     });
-
-    const filename = `${(sop.code || "SOP")}_table-sheet.pdf`;
-    doc.save(filename);
     root.innerHTML = "";
   },
 
@@ -277,22 +304,8 @@ const PdfExport = {
     await waitForImages(sheet);
 
     if (onProgress) onProgress("جاري إنشاء ملف PDF...");
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
-
-    await new Promise(resolve => {
-      doc.html(sheet, {
-        callback: () => resolve(),
-        x: 0, y: 0,
-        width: 595,               // A4 width in pt
-        windowWidth: 794,         // px width of sheet
-        autoPaging: "text",
-        html2canvas: { scale: 0.75, useCORS: true },
-      });
-    });
-
     const filename = `${(sop.code || "SOP")}_${(sop.title || "sop").replace(/[^\w\-]+/g, "_")}.pdf`;
-    doc.save(filename);
+    await renderPagedPdf({ sheet, orientation: "p", filename, scale: 2 });
     root.innerHTML = "";
   },
 };
