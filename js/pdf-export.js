@@ -143,10 +143,6 @@ const PdfExport = {
     const tbody = sheet.querySelector("#xsheet-body");
     let idx = 0;
     (sop.stages || []).forEach(stage => {
-      const stageRow = document.createElement("tr");
-      stageRow.innerHTML = `<td colspan="10" class="xsheet-stage-row">${esc(stage.title_ar || stage.title || "مرحلة")}</td>`;
-      tbody.appendChild(stageRow);
-
       (stage.steps || []).forEach(step => {
         idx++;
         const tr = document.createElement("tr");
@@ -155,7 +151,7 @@ const PdfExport = {
           <td>${idx}</td>
           <td><b>${esc(step.title_ar || step.title)}</b></td>
           <td>${(step.requirements || []).map(esc).join("<br/>") || "-"}</td>
-          <td>${esc(step.ppe_notes || "-")}</td>
+          <td>${esc(sop.safety_notes || "-")}</td>
           <td>${esc(step.description || "-")}</td>
           <td class="xsheet-img-cell">
             ${step.images && step.images[0] ? `<img class="xsheet-thumb" src="${esc(step.images[0].image_url)}" crossorigin="anonymous"/>` : "-"}
@@ -241,15 +237,8 @@ const PdfExport = {
       ` : ""}
     `;
 
-    let stageNo = 0;
+    let stepNo = 0;
     for (const stage of (sop.stages || [])) {
-      stageNo++;
-      const stageEl = document.createElement("div");
-      stageEl.className = "psheet-stage";
-      stageEl.textContent = `المرحلة ${stageNo} — ${stage.title_ar || stage.title}`;
-      sheet.appendChild(stageEl);
-
-      let stepNo = 0;
       for (const step of (stage.steps || [])) {
         stepNo++;
         const stepEl = document.createElement("div");
@@ -262,7 +251,7 @@ const PdfExport = {
               ${step.requirements && step.requirements.length ? `
                 <div class="psheet-req"><b>المعدات والآلات المستخدمة:</b> ${step.requirements.map(r => esc(r)).join(" · ")}</div>
               ` : ""}
-              ${step.ppe_notes ? `<div class="psheet-req">⚠️ <b>مهمات وإجراءات الوقاية:</b> ${esc(step.ppe_notes)}</div>` : ""}
+              ${sop.safety_notes ? `<div class="psheet-req">⚠️ <b>مهمات وإجراءات الوقاية:</b> ${esc(sop.safety_notes)}</div>` : ""}
               ${step.description ? `<p>${esc(step.description)}</p>` : ""}
               ${step.accept_criteria ? `<div class="psheet-req">✔ <b>معيار القبول:</b> ${esc(step.accept_criteria)}</div>` : ""}
               ${step.inspection_method ? `<div class="psheet-req"><b>طريقة الفحص:</b> ${esc(step.inspection_method)}</div>` : ""}
