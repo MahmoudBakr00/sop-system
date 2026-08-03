@@ -324,7 +324,7 @@ const App = {
           <h2 class="section-title" style="margin-top:0;">لوحة المراحل (Flow)</h2>
           <div class="station-flow">
             ${ordered.map((stage, i) => `
-              ${i > 0 ? `<div class="station-arrow">←</div>` : ""}
+              ${i > 0 ? `<div class="station-connector"><div class="line"></div><div class="arrowhead"></div></div>` : ""}
               <div class="station-node">
                 <div class="station-badge">${stage.station_no ?? "؟"}</div>
                 <div class="station-label">${esc(stage.title_ar || stage.title)}</div>
