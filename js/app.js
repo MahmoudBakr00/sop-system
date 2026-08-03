@@ -119,6 +119,7 @@ const App = {
         <div><h1>تعليمات التشغيل (SOPs)</h1><p>كل مرحلة فيها خطوات، متطلبات، صور، وفيديو للفحص أو التجميع</p></div>
         ${Auth.canEdit() ? `<a href="#/new" class="btn btn-primary">+ SOP جديد</a>` : ""}
       </div>
+      <div id="line-flow-dashboard"></div>
       ${Auth.isAdmin() ? `<div id="logo-settings"></div>` : ""}
       <div class="filters">
         <input id="search-box" placeholder="ابحث بالاسم أو الكود..."/>
@@ -131,6 +132,8 @@ const App = {
       </div>
       <div id="sop-grid" class="sop-grid"><div class="spinner"></div></div>
     `;
+
+    this.renderLineFlowDashboard(main.querySelector("#line-flow-dashboard"));
 
     if (Auth.isAdmin()) {
       const logoBox = main.querySelector("#logo-settings");
@@ -155,6 +158,68 @@ const App = {
     main.querySelector("#search-box").addEventListener("input", debounce(load, 300));
     main.querySelector("#status-filter").addEventListener("change", load);
     await load();
+  },
+
+  // لوحة فلو الخط — كل الـ SOPs (كل واحد = محطة) مرتبة ورا بعض حسب رقم المحطة
+  async renderLineFlowDashboard(box) {
+    box.innerHTML = `<div class="form-card"><div class="spinner"></div></div>`;
+    let lines = [];
+    try {
+      lines = await DB.listDistinctLines();
+    } catch (e) {
+      box.innerHTML = "";
+      return;
+    }
+    if (!lines.length) { box.innerHTML = ""; return; }
+
+    box.innerHTML = `
+      <div class="form-card">
+        <h2 style="margin-top:0;">فلو الخط — ترتيب الـ SOPs (المحطات) ورا بعض</h2>
+        <div class="field" style="max-width:280px;">
+          <label>اختار الخط</label>
+          <select id="line-select">
+            ${lines.map(l => `<option value="${attr(l)}">${esc(l)}</option>`).join("")}
+          </select>
+        </div>
+        <div id="line-flow-body"></div>
+      </div>
+    `;
+
+    const select = box.querySelector("#line-select");
+    const flowBody = box.querySelector("#line-flow-body");
+
+    const loadLine = async () => {
+      flowBody.innerHTML = `<div class="spinner"></div>`;
+      try {
+        const sops = await DB.listSops({ station: select.value });
+        flowBody.innerHTML = this.buildSopFlowHtml(sops);
+      } catch (e) {
+        flowBody.innerHTML = `<div class="hint">${esc(e.message)}</div>`;
+      }
+    };
+    select.addEventListener("change", loadLine);
+    await loadLine();
+  },
+
+  // بناء HTML فلو الـ SOPs مرتبة حسب رقم المحطة (كل SOP = محطة على الخط)
+  buildSopFlowHtml(sops) {
+    if (!sops || !sops.length) return `<div class="hint">لا توجد SOPs على الخط ده.</div>`;
+    const ordered = [...sops].sort((a, b) => {
+      const an = a.station_no ?? 999999, bn = b.station_no ?? 999999;
+      return an - bn;
+    });
+    return `
+      <div class="station-flow">
+        ${ordered.map((sop, i) => `
+          ${i > 0 ? `<div class="station-connector"><div class="line"></div><div class="arrowhead"></div></div>` : ""}
+          <a href="#/sop/${sop.id}" class="station-node" style="text-decoration:none; display:block;">
+            <div class="station-badge">${sop.station_no ?? "؟"}</div>
+            <div class="station-label">${esc(sop.title_ar || sop.title)}</div>
+            <div class="station-sub">${esc(sop.code || "بدون كود")}</div>
+          </a>
+        `).join("")}
+      </div>
+    `;
   },
 
   // لوجو الشركة — بيتضاف مرة واحدة بس من هنا، وبيظهر تلقائيًا في كل الطباعات بعد كده
@@ -201,16 +266,14 @@ const App = {
       <h3>${esc(sop.title_ar || sop.title)}</h3>
       <div class="meta">
         <span class="badge ${sop.status}">${statusLabel(sop.status)}</span>
-        ${sop.station ? `<span>${esc(sop.station)}</span>` : ""}
+        ${sop.station ? `<span>${esc(sop.station)}${sop.station_no ? ` #${sop.station_no}` : ""}</span>` : ""}
         <span>v${sop.version || 1}</span>
       </div>
       <div class="actions">
         <a class="btn btn-sm" href="#/sop/${sop.id}">عرض</a>
         ${Auth.canEdit() ? `<a class="btn btn-sm btn-ghost" href="#/sop/${sop.id}/edit">تعديل</a>` : ""}
-        <button class="btn btn-sm btn-ghost flow-toggle-btn">🔀 عرض الفلو</button>
         ${Auth.isAdmin() ? `<button class="btn btn-sm btn-danger del-btn">حذف</button>` : ""}
       </div>
-      <div class="card-flow-box" style="display:none;"></div>
     `;
     if (Auth.isAdmin()) {
       card.querySelector(".del-btn").onclick = async () => {
@@ -219,46 +282,7 @@ const App = {
         card.remove();
       };
     }
-    const flowBtn = card.querySelector(".flow-toggle-btn");
-    const flowBox = card.querySelector(".card-flow-box");
-    let loaded = false;
-    flowBtn.onclick = async () => {
-      const isHidden = flowBox.style.display === "none";
-      if (!isHidden) { flowBox.style.display = "none"; flowBtn.textContent = "🔀 عرض الفلو"; return; }
-      flowBox.style.display = "block";
-      flowBtn.textContent = "🔀 إخفاء الفلو";
-      if (loaded) return;
-      flowBox.innerHTML = `<div class="spinner"></div>`;
-      try {
-        const full = await DB.getSopFull(sop.id);
-        flowBox.innerHTML = this.buildStationFlowHtml(full.stages || []);
-        loaded = true;
-      } catch (e) {
-        flowBox.innerHTML = `<div class="hint">تعذر تحميل الفلو</div>`;
-      }
-    };
     return card;
-  },
-
-  // بناء HTML فلو المراحل (نفس المستخدم في صفحة العرض) — قابل لإعادة الاستخدام في الداشبورد
-  buildStationFlowHtml(stages) {
-    if (!stages || !stages.length) return `<div class="hint">لا توجد مراحل مضافة بعد.</div>`;
-    const ordered = [...stages].sort((a, b) => {
-      const an = a.station_no ?? 999999, bn = b.station_no ?? 999999;
-      return an - bn;
-    });
-    return `
-      <div class="station-flow">
-        ${ordered.map((stage, i) => `
-          ${i > 0 ? `<div class="station-connector"><div class="line"></div><div class="arrowhead"></div></div>` : ""}
-          <div class="station-node">
-            <div class="station-badge">${stage.station_no ?? "؟"}</div>
-            <div class="station-label">${esc(stage.title_ar || stage.title)}</div>
-            <div class="station-sub">${(stage.steps || []).length} خطوة</div>
-          </div>
-        `).join("")}
-      </div>
-    `;
   },
 
   // ---------------- New ----------------
@@ -346,16 +370,6 @@ const App = {
     `;
     main.appendChild(header);
     wireVideoBox(header);
-
-    // لوحة فلو المراحل — مرتبة حسب رقم المحطة اللي اتحط لكل مرحلة
-    if (sop.stages && sop.stages.length) {
-      main.insertAdjacentHTML("beforeend", `
-        <div class="view-section">
-          <h2 class="section-title" style="margin-top:0;">لوحة المراحل (Flow)</h2>
-          ${this.buildStationFlowHtml(sop.stages)}
-        </div>
-      `);
-    }
 
     // 4) الأدوات والمواد
     if (sop.tools && sop.tools.length) {
@@ -482,6 +496,21 @@ const App = {
     }
   },
 };
+
+function videoBoxHtml(url) {
+  return `
+    <div class="sop-video-box">
+      <video controls preload="metadata" class="sop-video-player">
+        <source src="${esc(url)}"/>
+        المتصفح مش بيدعم تشغيل الفيديو مباشرة — <a href="${esc(url)}" target="_blank" rel="noopener">افتح الفيديو في تاب جديد</a>
+      </video>
+      <a href="${esc(url)}" download class="hint">⬇️ تنزيل الفيديو</a>
+    </div>
+  `;
+}
+function wireVideoBox(_container) {
+  // الفيديو والتنزيل شغالين بالـ HTML الأساسي (video controls + a download) — مفيش سلوك JS إضافي مطلوب هنا
+}
 
 function roleLabel(role) {
   return { admin: "أدمن", editor: "محرر", viewer: "مشاهد" }[role] || "مشاهد";
