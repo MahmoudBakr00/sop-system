@@ -353,23 +353,32 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 
 /* ---------- Station flow dashboard (ordered by station_no) ---------- */
 .station-flow{
-  display:flex; align-items:stretch; gap:4px; overflow-x:auto; padding:10px 2px 16px;
+  display:flex; align-items:center; flex-wrap:nowrap; gap:0; padding:18px 4px;
+  overflow-x:auto;
 }
 .station-node{
-  flex:0 0 auto; min-width:130px; max-width:170px;
-  background:#fff; border:2px solid var(--blueprint-800); border-radius:10px;
-  padding:12px 14px; box-shadow:var(--card-shadow);
+  flex:0 0 auto; min-width:140px; max-width:180px;
+  background:var(--blueprint-800); color:#fff; border:2px solid var(--blueprint-900, #1b3a5c);
+  border-radius:10px; padding:14px 16px; box-shadow:var(--card-shadow); text-align:center;
 }
 .station-badge{
   display:inline-flex; align-items:center; justify-content:center;
-  min-width:24px; height:24px; padding:0 6px; border-radius:50%; background:var(--blueprint-800); color:#fff;
-  font-family:var(--font-mono); font-size:12px; font-weight:700; margin-bottom:6px;
+  min-width:26px; height:26px; padding:0 6px; border-radius:50%; background:#fff; color:var(--blueprint-800);
+  font-family:var(--font-mono); font-size:13px; font-weight:800; margin-bottom:8px;
 }
-.station-label{font-family:var(--font-display); font-size:13.5px; font-weight:600; line-height:1.3;}
-.station-sub{font-size:11px; color:#8a7f66; margin-top:4px;}
-.station-arrow{
-  flex:0 0 auto; display:flex; align-items:center; justify-content:center;
-  font-size:20px; color:var(--blueprint-800); min-width:26px;
+.station-label{font-family:var(--font-display); font-size:13.5px; font-weight:700; line-height:1.35;}
+.station-sub{font-size:11px; color:#e4ddc9; margin-top:4px;}
+
+/* الموصل بين صندوقين: خط أفقي + رأس سهم مثلث حقيقي (مش حرف نصي) عشان يبان بوضوح دايمًا */
+.station-connector{
+  flex:0 0 auto; display:flex; align-items:center; min-width:38px; height:2px;
+}
+.station-connector .line{flex:1; height:3px; background:var(--blueprint-800);}
+.station-connector .arrowhead{
+  width:0; height:0;
+  border-top:7px solid transparent; border-bottom:7px solid transparent;
+  border-right:11px solid var(--blueprint-800); /* RTL: بيشاور لليسار زي اتجاه القراءة */
+  margin-left:-1px;
 }
 
 .logo-settings-box{
