@@ -7,7 +7,7 @@
 // يلتقط عنصر الـ HTML كصورة واحدة عالية الدقة، ويقصّه على شكل صفحات A4 (بدون أي
 // اعتماد على نصوص جسPDF الداخلية) — ده اللي بيمنع تشويه الحروف العربية اللي بيحصل
 // مع doc.html()'s autoPaging لإنها بتحاول ترسم نص حقيقي بخط لاتيني افتراضي.
-async function renderPagedPdf({ sheet, orientation = "p", filename, scale = 2, footerEl = null, format = "a4" }) {
+async function renderPagedPdf({ sheet, orientation = "p", filename, scale = 2, footerEl = null, format = "a4", singlePage = false }) {
   const canvas = await html2canvas(sheet, { scale, useCORS: true, backgroundColor: "#ffffff" });
 
   const { jsPDF } = window.jspdf;
@@ -28,6 +28,25 @@ async function renderPagedPdf({ sheet, orientation = "p", filename, scale = 2, f
     footerHPt = (footerCanvas.height / footerCanvas.width) * pageW;
   }
   const contentPageH = fullPageH - (footerCanvas ? footerHPt + 8 : 0);
+
+  // وضع "صفحة واحدة" — بيضغط المحتوى كله (مهما كان طوله) عشان يتحشر في صفحة واحدة بدل ما يتقسم
+  if (singlePage) {
+    let w = pageW;
+    let h = (w * canvas.height) / canvas.width;
+    if (h > contentPageH) {
+      h = contentPageH;
+      w = (h * canvas.width) / canvas.height;
+    }
+    const x = margin + (pageW - w) / 2;
+    const imgData = canvas.toDataURL("image/png");
+    doc.addImage(imgData, "PNG", x, margin, w, h);
+    if (footerCanvas) {
+      const footerData = footerCanvas.toDataURL("image/png");
+      doc.addImage(footerData, "PNG", margin, margin + fullPageH - footerHPt, pageW, footerHPt);
+    }
+    doc.save(filename);
+    return;
+  }
 
   const pxPerPt = canvas.width / pageW;       // px-per-pt عند نفس عرض الصفحة
   const pageHeightPx = Math.floor(contentPageH * pxPerPt);
@@ -143,16 +162,16 @@ const PdfExport = {
       <table class="xsheet-table">
         <thead>
           <tr>
-            <th style="width:30px;">م<br/><span class="en">No.</span></th>
-            <th style="width:130px;">الخطوات<br/><span class="en">Steps</span></th>
-            <th style="width:150px;">محتوى الفحص<br/><span class="en">Inspection Content</span></th>
-            <th style="width:120px;">العدة<br/><span class="en">Tools</span></th>
-            <th style="width:200px;">الفحص القياسي<br/><span class="en">Standard Inspection</span></th>
-            <th style="width:200px;">متطلبات العمل<br/><span class="en">Work Requirements</span></th>
-            <th style="width:180px;">الصور<br/><span class="en">Photos</span></th>
-            <th style="width:130px;">إجراءات السلامة<br/><span class="en">Safety</span></th>
-            <th style="width:90px;">معدل التكرار<br/><span class="en">Repetition</span></th>
-            <th style="width:150px;">الإجراء عند الرفض<br/><span class="en">Action if Rejected</span></th>
+            <th style="width:3%;">م<br/><span class="en">No.</span></th>
+            <th style="width:10%;">الخطوات<br/><span class="en">Steps</span></th>
+            <th style="width:11%;">محتوى الفحص<br/><span class="en">Inspection Content</span></th>
+            <th style="width:8%;">العدة<br/><span class="en">Tools</span></th>
+            <th style="width:15%;">الفحص القياسي<br/><span class="en">Standard Inspection</span></th>
+            <th style="width:15%;">متطلبات العمل<br/><span class="en">Work Requirements</span></th>
+            <th style="width:13%;">الصور<br/><span class="en">Photos</span></th>
+            <th style="width:9%;">إجراءات السلامة<br/><span class="en">Safety</span></th>
+            <th style="width:6%;">معدل التكرار<br/><span class="en">Repetition</span></th>
+            <th style="width:10%;">الإجراء عند الرفض<br/><span class="en">Action if Rejected</span></th>
           </tr>
         </thead>
         <tbody id="xsheet-body"></tbody>
@@ -222,6 +241,7 @@ const PdfExport = {
       filename: `${(sop.code || "SOP")}_table-sheet.pdf`,
       scale: 2,
       footerEl: buildFormFooter(),
+      singlePage: true,
     });
     root.innerHTML = "";
   },
