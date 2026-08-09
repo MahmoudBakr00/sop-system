@@ -153,6 +153,16 @@ const PdfExport = {
         </tr>
       </table>
 
+      ${sop.video_url ? `
+        <div class="xsheet-video-bar">
+          <img class="qr-target" data-video="${esc(sop.video_url)}" />
+          <div>
+            <b>فيديو الفحص / التجميع — امسح الكود لتشغيله</b><br/>
+            <span class="en">Scan to watch inspection / assembly video</span>
+          </div>
+        </div>
+      ` : ""}
+
       ${sop.pre_work_procedure ? `
         <div class="xsheet-bar">
           <b>قبل العمل / Pre-work:</b> ${esc(sop.pre_work_procedure)}
@@ -229,6 +239,17 @@ const PdfExport = {
     if (!idx) {
       tbody.innerHTML = `<tr><td colspan="10" class="hint">لا توجد خطوات مضافة بعد.</td></tr>`;
     }
+
+    // Render QR code للفيديو (لو موجود) قبل الالتقاط
+    sheet.querySelectorAll(".qr-target").forEach(img => {
+      const tmp = document.createElement("div");
+      new QRCode(tmp, { text: img.dataset.video, width: 130, height: 130 });
+      requestAnimationFrame(() => {
+        const c = tmp.querySelector("canvas") || tmp.querySelector("img");
+        if (c && c.tagName === "CANVAS") img.src = c.toDataURL("image/png");
+        else if (c) img.src = c.src;
+      });
+    });
 
     if (onProgress) onProgress("جاري تجهيز الصور...");
     await waitForImages(sheet);
