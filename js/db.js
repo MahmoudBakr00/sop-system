@@ -192,6 +192,11 @@ const DB = {
     if (error) throw error;
     return data;
   },
+  async updateTool(id, payload) {
+    const { data, error } = await supabaseClient.from("sop_tools").update(payload).eq("id", id).select().single();
+    if (error) throw error;
+    return data;
+  },
   async deleteTool(id) {
     const { error } = await supabaseClient.from("sop_tools").delete().eq("id", id);
     if (error) throw error;
@@ -207,6 +212,11 @@ const DB = {
   async addReference(sopId, payload, orderIndex) {
     const { data, error } = await supabaseClient
       .from("sop_references").insert({ sop_id: sopId, order_index: orderIndex, ...payload }).select().single();
+    if (error) throw error;
+    return data;
+  },
+  async updateReference(id, payload) {
+    const { data, error } = await supabaseClient.from("sop_references").update(payload).eq("id", id).select().single();
     if (error) throw error;
     return data;
   },
