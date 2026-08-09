@@ -329,7 +329,7 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 
 /* ---------- Table-style print sheet (Excel-like, one row per step) ---------- */
 .xsheet{
-  width:1900px; background:#fff; padding:24px 28px; font-family:var(--font-body);
+  width:1900px; background:#fff; padding:0; font-family:var(--font-body);
   direction:rtl; color:#111;
 }
 .xsheet-head{
@@ -343,17 +343,16 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 .xsheet-sub{font-size:13px; color:#666;}
 .xsheet-docno{font-size:14px; text-align:left; border-right:1px solid #ccc; padding-right:16px; white-space:nowrap;}
 
+.xsheet-video-inline{
+  display:flex; align-items:center; gap:8px;
+  border-right:1px solid #ccc; padding-right:16px; font-size:11px; white-space:nowrap;
+}
+.xsheet-video-inline img.qr-target{width:56px; height:56px; flex:0 0 auto;}
+.xsheet-video-inline .en{font-family:var(--font-mono); font-size:9.5px; color:#666;}
+
 .xsheet-info{width:100%; border-collapse:collapse; margin-bottom:10px; font-size:15px;}
 .xsheet-info th, .xsheet-info td{border:1.5px solid #111; padding:10px 12px; text-align:center;}
 .xsheet-info th{background:#f1ede0; font-family:var(--font-display); font-size:13px; line-height:1.5;}
-
-.xsheet-video-bar{
-  display:flex; align-items:center; gap:14px;
-  border:1.5px solid var(--blueprint-800); background:#fff;
-  padding:10px 16px; margin-bottom:10px; border-radius:4px; font-size:14px;
-}
-.xsheet-video-bar img.qr-target{width:80px; height:80px; flex:0 0 auto;}
-.xsheet-video-bar .en{font-family:var(--font-mono); font-size:11px; color:#666;}
 
 .xsheet-bar{
   border:1.5px solid var(--blueprint-800); background:#f1ede0; color:var(--blueprint-900);
