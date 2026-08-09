@@ -48,7 +48,7 @@ const Editor = {
     saveBar.className = "save-bar";
     saveBar.innerHTML = `
       <button class="btn btn-primary btn-lg" id="master-save-btn">💾 حفظ وإرسال للمراجعة</button>
-      <span class="hint">الزرار ده بيحفظ كل حاجة كتبتها في الصفحة كلها (البيانات الأساسية، كل الخطوات، التفاصيل الإضافية)، وبيبعت الـ SOP للهيد للمراجعة، ويزوّد رقم الإصدار (Rev.).</span>
+      <span class="hint">يحفظ هذا الزر جميع البيانات المُدخلة في الصفحة (البيانات الأساسية، كل الخطوات، التفاصيل الإضافية)، ويُرسل الـ SOP إلى الهيد للمراجعة، ويزيد رقم الإصدار (Rev.).</span>
     `;
     saveBar.querySelector("#master-save-btn").onclick = async () => {
       const btn = saveBar.querySelector("#master-save-btn");
@@ -112,7 +112,7 @@ const Editor = {
         <div class="field"><label>عدد مرات الفحص</label><input id="f-freq" value="${attr(sop.inspection_frequency)}" placeholder="مثال: طبقًا لخطط العينات"/></div>
         <div class="field"><label>بيئة الفحص</label><input id="f-env" value="${attr(sop.inspection_environment)}" placeholder="مثال: الفحص على بعد 400 مم من اللوحة"/></div>
       </div>
-      <div class="field hint">رقم الإصدار الحالي (Revision No.): <b>v${sop.version || 1}</b> — بيزيد بس لما تدوس زرار "💾 حفظ التعديلات" تحت.</div>
+      <div class="field hint">رقم الإصدار الحالي (Revision No.): <b>v${sop.version || 1}</b> — يزداد فقط عند الضغط على زر "💾 حفظ وإرسال للمراجعة" أسفل الصفحة.</div>
 
       <div class="field">
         <label>فيديو الـ SOP (طريقة الفحص أو التجميع — فيديو واحد للـ SOP كله)</label>
@@ -127,7 +127,7 @@ const Editor = {
       </div>
 
       <div class="field">
-        <label>معدات وإجراءات السيفتي (تتكتب مرة واحدة وتتكرر تلقائيًا جنب كل خطوة في التقرير)</label>
+        <label>معدات وإجراءات السلامة (تُكتب مرة واحدة وتتكرر تلقائيًا بجانب كل خطوة في التقرير)</label>
         <textarea id="f-safety" placeholder="مثال: نظارة واقية، قفازات مقاومة للحرارة، حذاء أمان...">${esc(sop.safety_notes)}</textarea>
       </div>
 
@@ -154,7 +154,7 @@ const Editor = {
       <div class="identity-box">
         <div>📝 <b>أنشأ بواسطة:</b> ${esc(sop.created_by_name || "-")} — ${fmtDate(sop.created_at)}</div>
         <div>✏️ <b>آخر تعديل بواسطة:</b> ${esc(sop.updated_by_name || "-")} — ${fmtDate(sop.updated_at)}</div>
-        <p class="hint" style="margin:6px 0 0;">الاسم والتاريخ بياخدهم النظام تلقائيًا من حساب المستخدم المسجّل دخول — مفيش إدخال يدوي.</p>
+        <p class="hint" style="margin:6px 0 0;">يأخذ النظام الاسم والتاريخ تلقائيًا من حساب المستخدم المسجّل دخوله — لا حاجة لإدخالهما يدويًا.</p>
       </div>
     `;
     wireAutoTranslate(card.querySelector("#f-title-ar"), card.querySelector("#f-title"));
@@ -169,7 +169,7 @@ const Editor = {
       try {
         const url = await DB.uploadSopVideo(sop.id, file);
         videoInput.value = url;
-        statusEl.textContent = "تم رفع الفيديو — هيتحفظ لما تدوس زرار الحفظ تحت الصفحة";
+        statusEl.textContent = "تم رفع الفيديو، وسيُحفظ عند الضغط على زر الحفظ أسفل الصفحة";
       } catch (e) {
         statusEl.textContent = "";
         toast(e.message, true);
@@ -210,7 +210,7 @@ const Editor = {
         }
       } catch (e) {
         if (String(e.message).includes("uq_sop_station_no") || e.code === "23505") {
-          throw new Error("رقم المحطة ده مستخدم قبل كده في نفس الخط — اختار رقم تاني");
+          throw new Error("رقم المحطة هذا مُستخدم بالفعل في نفس الخط — يُرجى اختيار رقم آخر");
         }
         throw e;
       }
@@ -224,7 +224,7 @@ const Editor = {
     card.className = "form-card workflow-box";
     const fmtDate = (d) => d ? new Date(d).toLocaleString("ar-EG") : "-";
     const statusLabels = {
-      draft: "مسودة — لسه ما اتبعتش للمراجعة",
+      draft: "مسودة — لم تُرسل للمراجعة بعد",
       pending_head: "⏳ في انتظار مراجعة الهيد",
       pending_director: "⏳ في انتظار اعتماد الدايركتور",
       approved: "✅ معتمد نهائيًا",
@@ -284,7 +284,7 @@ const Editor = {
     if (submitBtn) submitBtn.onclick = async () => {
       try {
         await DB.submitForReview(sop.id);
-        toast("اتبعت للهيد للمراجعة");
+        toast("أُرسل الـ SOP إلى الهيد للمراجعة");
         await App.navigate(`#/sop/${sop.id}/edit`, true);
       } catch (e) { toast(e.message, true); }
     };
@@ -292,7 +292,7 @@ const Editor = {
     if (headApprove) headApprove.onclick = async () => {
       try {
         await DB.headDecide(sop.id, true, card.querySelector("#head-comment").value.trim());
-        toast("تمت الموافقة — اتبعت للدايركتور");
+        toast("تمت الموافقة — أُرسل الـ SOP إلى الدايركتور");
         await App.navigate(`#/sop/${sop.id}/edit`, true);
       } catch (e) { toast(e.message, true); }
     };
@@ -309,7 +309,7 @@ const Editor = {
     if (dirApprove) dirApprove.onclick = async () => {
       try {
         await DB.directorDecide(sop.id, true, card.querySelector("#director-comment").value.trim());
-        toast("تم الاعتماد النهائي — إصدار جديد اتعمل");
+        toast("تم الاعتماد النهائي — تم إصدار نسخة جديدة");
         await App.navigate(`#/sop/${sop.id}/edit`, true);
       } catch (e) { toast(e.message, true); }
     };
@@ -349,11 +349,11 @@ const Editor = {
     card.className = "form-card";
     card.innerHTML = `
       <h2>4) الأدوات والمواد المطلوبة</h2>
-      <p class="hint">العدد، الأجهزة، أدوات القياس، المواد الخام أو المكونات</p>
+      <p class="hint">العدد، الأجهزة، أدوات القياس، المواد الخام أو المكوّنات — عدّل أي حقل مباشرة، وسيُحفظ مع بقية بيانات النموذج عند الضغط على زر الحفظ أسفل الصفحة</p>
       <div class="list-rows" id="tools-rows"></div>
       <div class="editor-toolbar">
         <select id="tool-cat" style="width:130px;">
-          <option value="tool">أداة/عدة</option>
+          <option value="tool">أداة</option>
           <option value="instrument">جهاز قياس</option>
           <option value="material">مادة/مكوّن</option>
         </select>
@@ -363,16 +363,19 @@ const Editor = {
       </div>
     `;
     const rows = card.querySelector("#tools-rows");
-    const catLabel = { tool: "أداة", instrument: "قياس", material: "مادة" };
     const paint = () => {
       rows.innerHTML = (sop.tools || []).map(t => `
         <div class="list-row" data-id="${t.id}">
-          <span class="badge tool-cat">${catLabel[t.category] || t.category}</span>
-          <b>${esc(t.name)}</b>
-          ${t.spec ? `<span class="hint">— ${esc(t.spec)}</span>` : ""}
+          <select class="tool-cat-edit" style="width:110px;">
+            <option value="tool" ${t.category === "tool" ? "selected" : ""}>أداة</option>
+            <option value="instrument" ${t.category === "instrument" ? "selected" : ""}>جهاز قياس</option>
+            <option value="material" ${t.category === "material" ? "selected" : ""}>مادة/مكوّن</option>
+          </select>
+          <input class="tool-name-edit" value="${attr(t.name)}" style="flex:1; min-width:110px; padding:6px 8px; border:1px solid var(--blueprint-line); border-radius:3px;">
+          <input class="tool-spec-edit" value="${attr(t.spec || "")}" placeholder="مواصفة (اختياري)" style="flex:1; min-width:110px; padding:6px 8px; border:1px solid var(--blueprint-line); border-radius:3px;">
           <button class="btn btn-sm btn-danger rm" style="margin-inline-start:auto;">حذف</button>
         </div>
-      `).join("") || `<div class="hint">لسه مفيش أدوات/مواد مضافة</div>`;
+      `).join("") || `<div class="hint">لا توجد أدوات أو مواد مضافة بعد</div>`;
       rows.querySelectorAll(".rm").forEach(btn => {
         btn.onclick = async () => {
           const id = btn.closest(".list-row").dataset.id;
@@ -396,6 +399,21 @@ const Editor = {
       } catch (e) { toast(e.message, true); }
     };
     paint();
+
+    this.registerSave(async () => {
+      for (const rowEl of Array.from(rows.querySelectorAll(".list-row"))) {
+        const id = rowEl.dataset.id;
+        const payload = {
+          category: rowEl.querySelector(".tool-cat-edit").value,
+          name: rowEl.querySelector(".tool-name-edit").value.trim(),
+          spec: rowEl.querySelector(".tool-spec-edit").value.trim() || null,
+        };
+        if (!payload.name) continue;
+        await DB.updateTool(id, payload);
+        const t = sop.tools.find(x => x.id === id);
+        if (t) Object.assign(t, payload);
+      }
+    });
     return card;
   },
 
@@ -417,11 +435,11 @@ const Editor = {
     const paint = () => {
       rows.innerHTML = (sop.references || []).map(r => `
         <div class="list-row" data-id="${r.id}">
-          <b>${esc(r.ref_text)}</b>
-          ${r.ref_url ? `<a href="${attr(r.ref_url)}" target="_blank" rel="noopener" class="hint">فتح الرابط</a>` : ""}
+          <input class="ref-text-edit" value="${attr(r.ref_text)}" style="flex:1; min-width:140px; padding:6px 8px; border:1px solid var(--blueprint-line); border-radius:3px;">
+          <input class="ref-url-edit" value="${attr(r.ref_url || "")}" placeholder="رابط (اختياري)" style="flex:1; min-width:140px; padding:6px 8px; border:1px solid var(--blueprint-line); border-radius:3px;">
           <button class="btn btn-sm btn-danger rm" style="margin-inline-start:auto;">حذف</button>
         </div>
-      `).join("") || `<div class="hint">لسه مفيش مراجع مضافة</div>`;
+      `).join("") || `<div class="hint">لا توجد مراجع مضافة بعد</div>`;
       rows.querySelectorAll(".rm").forEach(btn => {
         btn.onclick = async () => {
           const id = btn.closest(".list-row").dataset.id;
@@ -444,6 +462,20 @@ const Editor = {
       } catch (e) { toast(e.message, true); }
     };
     paint();
+
+    this.registerSave(async () => {
+      for (const rowEl of Array.from(rows.querySelectorAll(".list-row"))) {
+        const id = rowEl.dataset.id;
+        const payload = {
+          ref_text: rowEl.querySelector(".ref-text-edit").value.trim(),
+          ref_url: rowEl.querySelector(".ref-url-edit").value.trim() || null,
+        };
+        if (!payload.ref_text) continue;
+        await DB.updateReference(id, payload);
+        const r = sop.references.find(x => x.id === id);
+        if (r) Object.assign(r, payload);
+      }
+    });
     return card;
   },
 
@@ -463,7 +495,7 @@ const Editor = {
               <td>${esc(r.profiles?.full_name || "-")}</td>
               <td>${esc(r.change_summary || "")}</td>
             </tr>
-          `).join("") || `<tr><td colspan="4" class="hint">لسه مفيش تعديلات مسجلة</td></tr>`}
+          `).join("") || `<tr><td colspan="4" class="hint">لا توجد تعديلات مسجّلة بعد</td></tr>`}
         </tbody>
       </table>
     `;
@@ -522,7 +554,7 @@ const Editor = {
           ${(step.requirements || []).map((r, i) => `<span class="chip" data-i="${i}">${esc(r)}<button type="button">×</button></span>`).join("")}
           <input class="req-input" placeholder="أضف أداة أو آلة..." style="border:none; flex:1; min-width:120px; padding:4px;"/>
         </div>
-        <p class="hint">معدات وإجراءات السيفتي بتتاخد تلقائيًا من بيانات الـ SOP فوق — مش محتاج تكتبها هنا.</p>
+        <p class="hint">تُؤخذ معدات وإجراءات السلامة تلقائيًا من بيانات الـ SOP أعلاه — لا حاجة لكتابتها هنا.</p>
       </div>
 
       <div class="field"><label>3) متطلبات العمل (Work Requirements)</label><textarea class="sp-desc" placeholder="اكتب خطوات التنفيذ الفعلية بالتفصيل...">${esc(step.description)}</textarea></div>
