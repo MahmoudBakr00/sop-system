@@ -129,6 +129,18 @@ const DB = {
     await supabaseClient.from("notifications").update({ is_read: true }).eq("user_id", userId).eq("is_read", false);
   },
 
+  // ---------- إزاحة أرقام المحطات (لإفساح مكان لمحطة جديدة تتحط بينهم) ----------
+  async shiftStationNos(station, fromStationNoInclusive) {
+    const { data: rows, error: e1 } = await supabaseClient
+      .from("sops").select("id, station_no").eq("station", station).gte("station_no", fromStationNoInclusive);
+    if (e1) throw e1;
+    // من الأكبر للأصغر عشان مايحصلش تصادم مؤقت مع الـ unique index
+    const sorted = [...rows].sort((a, b) => b.station_no - a.station_no);
+    for (const r of sorted) {
+      await supabaseClient.from("sops").update({ station_no: r.station_no + 1 }).eq("id", r.id);
+    }
+  },
+
   // ---------- كود تلقائي من اسم المحطة ----------
   async generateSopCode(sopId, station) {
     const { data, error } = await supabaseClient.rpc("generate_sop_code", {
