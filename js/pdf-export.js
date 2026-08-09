@@ -7,11 +7,11 @@
 // يلتقط عنصر الـ HTML كصورة واحدة عالية الدقة، ويقصّه على شكل صفحات A4 (بدون أي
 // اعتماد على نصوص جسPDF الداخلية) — ده اللي بيمنع تشويه الحروف العربية اللي بيحصل
 // مع doc.html()'s autoPaging لإنها بتحاول ترسم نص حقيقي بخط لاتيني افتراضي.
-async function renderPagedPdf({ sheet, orientation = "p", filename, scale = 2, footerEl = null }) {
+async function renderPagedPdf({ sheet, orientation = "p", filename, scale = 2, footerEl = null, format = "a4" }) {
   const canvas = await html2canvas(sheet, { scale, useCORS: true, backgroundColor: "#ffffff" });
 
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: "pt", format: "a4", orientation });
+  const doc = new jsPDF({ unit: "pt", format, orientation });
   const margin = 18;
   const pageW = doc.internal.pageSize.getWidth() - margin * 2;
   const fullPageH = doc.internal.pageSize.getHeight() - margin * 2;
@@ -90,13 +90,20 @@ const PdfExport = {
     let logoUrl = "";
     try { logoUrl = (await DB.getAppSettings()).logo_url || ""; } catch (_) { /* no logo yet */ }
 
+    const approvalLabels = {
+      draft: "مسودة / Draft", pending_head: "بانتظار مراجعة الهيد / Pending Head Review",
+      pending_director: "بانتظار اعتماد الدايركتور / Pending Director Approval",
+      approved: "معتمد / Approved", rejected_by_head: "مرفوض من الهيد / Rejected by Head",
+      rejected_by_director: "مرفوض من الدايركتور / Rejected by Director",
+    };
+
     sheet.innerHTML = `
       <div class="xsheet-head">
         ${logoUrl ? `<img class="xsheet-logo" src="${esc(logoUrl)}" crossorigin="anonymous"/>` : `<div class="xsheet-logo"></div>`}
         <div class="xsheet-approvals-mini">
-          <div><b>أنشأ</b><br/>${esc(sop.created_by_name || "-")}</div>
-          <div><b>آخر تعديل</b><br/>${esc(sop.updated_by_name || "-")}</div>
-          <div><b>اعتماد</b><br/>${esc(sop.approved_by || "لسه")}${sop.approved_at ? ` — ${esc(sop.approved_at)}` : ""}</div>
+          <div><b>إعداد<br/>Prepared</b><br/>${esc(sop.created_by_name || "-")}</div>
+          <div><b>مراجعة (هيد)<br/>Reviewed</b><br/>${esc(sop.head_reviewed_by ? "✔" : "-")}</div>
+          <div><b>اعتماد (دايركتور)<br/>Approved</b><br/>${esc(sop.approved_by || "لسه")}${sop.approved_at ? ` — ${esc(sop.approved_at)}` : ""}</div>
         </div>
         <div class="xsheet-title">
           <h1>${esc(sop.title_ar || sop.title)}</h1>
@@ -110,7 +117,12 @@ const PdfExport = {
 
       <table class="xsheet-info">
         <tr>
-          <th>المسؤولية</th><th>بيئة الفحص</th><th>عدد مرات الفحص</th><th>فحص العدة</th><th>الخط</th>
+          <th>المسؤولية<br/><span class="en">Responsibility</span></th>
+          <th>بيئة الفحص<br/><span class="en">Inspection Environment</span></th>
+          <th>عدد مرات الفحص<br/><span class="en">Inspection Frequency</span></th>
+          <th>العدة<br/><span class="en">Tools</span></th>
+          <th>الخط<br/><span class="en">Line</span></th>
+          <th>حالة الاعتماد<br/><span class="en">Approval Status</span></th>
         </tr>
         <tr>
           <td>${esc(roles || "-")}</td>
@@ -118,26 +130,56 @@ const PdfExport = {
           <td>${esc(sop.inspection_frequency || "-")}</td>
           <td>${esc(toolsTxt || "-")}</td>
           <td>${esc(sop.station || "-")}</td>
+          <td>${esc(approvalLabels[sop.approval_status] || sop.approval_status || "-")}</td>
         </tr>
       </table>
+
+      ${sop.pre_work_procedure ? `
+        <div class="xsheet-bar">
+          <b>قبل العمل / Pre-work:</b> ${esc(sop.pre_work_procedure)}
+        </div>
+      ` : ""}
 
       <table class="xsheet-table">
         <thead>
           <tr>
-            <th style="width:26px;">م</th>
-            <th style="width:110px;">الخطوة</th>
-            <th style="width:100px;">المعدات والآلات</th>
-            <th style="width:100px;">السيفتي</th>
-            <th>شرح الخطوة</th>
-            <th style="width:160px;">صورة الخطوة</th>
-            <th style="width:130px;">معيار القبول</th>
-            <th style="width:110px;">طريقة الفحص</th>
-            <th style="width:70px;">التكرار</th>
-            <th style="width:130px;">الإجراء عند الرفض</th>
+            <th style="width:30px;">م<br/><span class="en">No.</span></th>
+            <th style="width:130px;">الخطوات<br/><span class="en">Steps</span></th>
+            <th style="width:150px;">محتوى الفحص<br/><span class="en">Inspection Content</span></th>
+            <th style="width:120px;">العدة<br/><span class="en">Tools</span></th>
+            <th style="width:200px;">الفحص القياسي<br/><span class="en">Standard Inspection</span></th>
+            <th style="width:200px;">متطلبات العمل<br/><span class="en">Work Requirements</span></th>
+            <th style="width:180px;">الصور<br/><span class="en">Photos</span></th>
+            <th style="width:130px;">إجراءات السلامة<br/><span class="en">Safety</span></th>
+            <th style="width:90px;">معدل التكرار<br/><span class="en">Repetition</span></th>
+            <th style="width:150px;">الإجراء عند الرفض<br/><span class="en">Action if Rejected</span></th>
           </tr>
         </thead>
         <tbody id="xsheet-body"></tbody>
       </table>
+
+      ${sop.post_work_procedure ? `
+        <div class="xsheet-bar">
+          <b>بعد العمل / Post-work:</b> ${esc(sop.post_work_procedure)}
+        </div>
+      ` : ""}
+
+      <table class="xsheet-sign">
+        <thead>
+          <tr>
+            <th>الدور<br/><span class="en">Role</span></th>
+            <th>الاسم<br/><span class="en">Name</span></th>
+            <th>الوظيفة<br/><span class="en">Position</span></th>
+            <th>التوقيع<br/><span class="en">Signature</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>المدرب / Trainer</td><td>${esc(sop.trainer_name || "-")}</td><td>${esc(sop.trainer_position || "-")}</td><td></td></tr>
+          <tr><td>المفتش / Inspector</td><td>${esc(sop.inspector_name || "-")}</td><td>${esc(sop.inspector_position || "-")}</td><td></td></tr>
+          <tr><td>المشرف / Supervisor</td><td>${esc(sop.supervisor_name || "-")}</td><td>${esc(sop.supervisor_position || "-")}</td><td></td></tr>
+        </tbody>
+      </table>
+      ${sop.notes ? `<div class="xsheet-bar"><b>ملاحظات / Notes:</b> ${esc(sop.notes)}</div>` : ""}
     `;
 
     const tbody = sheet.querySelector("#xsheet-body");
@@ -150,14 +192,14 @@ const PdfExport = {
         tr.innerHTML = `
           <td>${idx}</td>
           <td><b>${esc(step.title_ar || step.title)}</b></td>
+          <td>${esc(step.inspection_method || "-")}</td>
           <td>${(step.requirements || []).map(esc).join("<br/>") || "-"}</td>
-          <td>${esc(sop.safety_notes || "-")}</td>
+          <td>${esc(step.accept_criteria || "-")}</td>
           <td>${esc(step.description || "-")}</td>
           <td class="xsheet-img-cell">
             ${step.images && step.images[0] ? `<img class="xsheet-thumb" src="${esc(step.images[0].image_url)}" crossorigin="anonymous"/>` : "-"}
           </td>
-          <td>${esc(step.accept_criteria || "-")}</td>
-          <td>${esc(step.inspection_method || "-")}</td>
+          <td>${esc(sop.safety_notes || "-")}</td>
           <td>${esc(step.inspection_repeat || "-")}</td>
           <td>${esc(step.reject_action || "-")}</td>
         `;
@@ -176,6 +218,7 @@ const PdfExport = {
     await renderPagedPdf({
       sheet,
       orientation: "l",
+      format: "a3",
       filename: `${(sop.code || "SOP")}_table-sheet.pdf`,
       scale: 2,
       footerEl: buildFormFooter(),
@@ -220,6 +263,9 @@ const PdfExport = {
           <img class="qr-target" data-video="${esc(sop.video_url)}" />
           <span>امسح الكود لمشاهدة فيديو الفحص / التجميع الخاص بالـ SOP<br/><span style="color:#888;">${esc(sop.video_url)}</span></span>
         </div>
+      ` : ""}
+      ${sop.pre_work_procedure ? `
+        <div class="psheet-block"><b>قبل العمل (Pre-work):</b> ${esc(sop.pre_work_procedure)}</div>
       ` : ""}
       ${(sop.tools && sop.tools.length) ? `
         <div class="psheet-block">
@@ -272,6 +318,30 @@ const PdfExport = {
         `;
         sheet.appendChild(stepEl);
       }
+    }
+
+    if (sop.post_work_procedure) {
+      const postEl = document.createElement("div");
+      postEl.className = "psheet-block";
+      postEl.innerHTML = `<b>بعد العمل (Post-work):</b> ${esc(sop.post_work_procedure)}`;
+      sheet.appendChild(postEl);
+    }
+
+    if (sop.trainer_name || sop.inspector_name || sop.supervisor_name) {
+      const signEl = document.createElement("div");
+      signEl.className = "psheet-block";
+      signEl.innerHTML = `
+        <table class="xsheet-sign">
+          <thead><tr><th>الدور</th><th>الاسم</th><th>الوظيفة</th><th>التوقيع</th></tr></thead>
+          <tbody>
+            <tr><td>المدرب</td><td>${esc(sop.trainer_name || "-")}</td><td>${esc(sop.trainer_position || "-")}</td><td></td></tr>
+            <tr><td>المفتش</td><td>${esc(sop.inspector_name || "-")}</td><td>${esc(sop.inspector_position || "-")}</td><td></td></tr>
+            <tr><td>المشرف</td><td>${esc(sop.supervisor_name || "-")}</td><td>${esc(sop.supervisor_position || "-")}</td><td></td></tr>
+          </tbody>
+        </table>
+        ${sop.notes ? `<p style="margin-top:8px;"><b>ملاحظات:</b> ${esc(sop.notes)}</p>` : ""}
+      `;
+      sheet.appendChild(signEl);
     }
 
     if (sop.references && sop.references.length) {
