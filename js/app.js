@@ -235,6 +235,7 @@ const App = {
     box.innerHTML = `
       <div class="form-card">
         <h2 style="margin-top:0;">فلو الخط — ترتيب الـ SOPs (المحطات) ورا بعض</h2>
+        <p class="hint">دوس على أي زرار "+" حوالين أي محطة: يمين/شمال بيضيف محطة قبلها/بعدها في التسلسل، فوق/تحت بيضيف محطة تشتغل بالتوازي معاها في نفس النقطة.</p>
         <div class="field" style="max-width:280px;">
           <label>اختار الخط</label>
           <select id="line-select">
@@ -252,7 +253,8 @@ const App = {
       flowBody.innerHTML = `<div class="spinner"></div>`;
       try {
         const sops = await DB.listSops({ station: select.value });
-        flowBody.innerHTML = this.buildSopFlowHtml(sops);
+        flowBody.innerHTML = "";
+        flowBody.appendChild(this.buildSopFlowGrid(sops, select.value, loadLine));
       } catch (e) {
         flowBody.innerHTML = `<div class="hint">${esc(e.message)}</div>`;
       }
@@ -261,25 +263,84 @@ const App = {
     await loadLine();
   },
 
-  // بناء HTML فلو الـ SOPs مرتبة حسب رقم المحطة (كل SOP = محطة على الخط)
-  buildSopFlowHtml(sops) {
-    if (!sops || !sops.length) return `<div class="hint">لا توجد SOPs على الخط ده.</div>`;
-    const ordered = [...sops].sort((a, b) => {
-      const an = a.station_no ?? 999999, bn = b.station_no ?? 999999;
-      return an - bn;
+  // بناء شبكة فلو الـ SOPs: أعمدة = رقم المحطة (تسلسل)، وكل عمود ممكن فيه أكتر من مسار موازي (flow_lane)
+  buildSopFlowGrid(sops, line, onChanged) {
+    const root = document.createElement("div");
+    if (!sops || !sops.length) {
+      root.innerHTML = `<div class="hint">لا توجد SOPs على الخط ده.</div>`;
+      return root;
+    }
+
+    // تجميع حسب رقم المحطة (عمود)، وترتيب كل عمود حسب المسار الموازي (صف)
+    const columns = {};
+    sops.forEach(s => {
+      const key = s.station_no ?? "none";
+      (columns[key] = columns[key] || []).push(s);
     });
-    return `
-      <div class="station-flow">
-        ${ordered.map((sop, i) => `
-          ${i > 0 ? `<div class="station-connector"><div class="line"></div><div class="arrowhead"></div></div>` : ""}
-          <a href="#/sop/${sop.id}" class="station-node" style="text-decoration:none; display:block;">
+    Object.values(columns).forEach(col => col.sort((a, b) => a.flow_lane - b.flow_lane));
+    const colKeys = Object.keys(columns).sort((a, b) => {
+      if (a === "none") return 1;
+      if (b === "none") return -1;
+      return Number(a) - Number(b);
+    });
+
+    const addNode = async (refSop, dir) => {
+      try {
+        let newStationNo = refSop.station_no ?? 0;
+        let newLane = 0;
+        if (dir === "before") {
+          await DB.shiftStationNos(line, newStationNo);
+        } else if (dir === "after") {
+          newStationNo = newStationNo + 1;
+          await DB.shiftStationNos(line, newStationNo);
+        } else if (dir === "lane-up" || dir === "lane-down") {
+          const col = columns[refSop.station_no ?? "none"] || [refSop];
+          const lanes = col.map(s => s.flow_lane ?? 0);
+          newLane = dir === "lane-up" ? Math.min(...lanes) - 1 : Math.max(...lanes) + 1;
+        }
+        const created = await DB.createSop({
+          title: "SOP جديد", title_ar: "SOP جديد", status: "draft",
+          station: line, station_no: newStationNo, flow_lane: newLane,
+        });
+        location.hash = `#/sop/${created.id}/edit`;
+      } catch (e) { toast(e.message, true); }
+    };
+
+    const flowEl = document.createElement("div");
+    flowEl.className = "station-flow-grid";
+    colKeys.forEach((key, colIdx) => {
+      if (colIdx > 0) {
+        const connector = document.createElement("div");
+        connector.className = "station-connector";
+        connector.innerHTML = `<div class="line"></div><div class="arrowhead"></div>`;
+        flowEl.appendChild(connector);
+      }
+      const colEl = document.createElement("div");
+      colEl.className = "station-col";
+      columns[key].forEach(sop => {
+        const cell = document.createElement("div");
+        cell.className = "station-cell";
+        cell.innerHTML = `
+          <button class="node-plus plus-top" title="أضف محطة موازية فوق">+</button>
+          <button class="node-plus plus-right" title="أضف محطة قبلها">+</button>
+          <button class="node-plus plus-left" title="أضف محطة بعدها">+</button>
+          <button class="node-plus plus-bottom" title="أضف محطة موازية تحت">+</button>
+          <a href="#/sop/${sop.id}" class="station-node">
             <div class="station-badge">${sop.station_no ?? "؟"}</div>
             <div class="station-label">${esc(sop.title_ar || sop.title)}</div>
             <div class="station-sub">${esc(sop.code || "بدون كود")}</div>
           </a>
-        `).join("")}
-      </div>
-    `;
+        `;
+        cell.querySelector(".plus-top").onclick = (e) => { e.preventDefault(); addNode(sop, "lane-up"); };
+        cell.querySelector(".plus-bottom").onclick = (e) => { e.preventDefault(); addNode(sop, "lane-down"); };
+        cell.querySelector(".plus-right").onclick = (e) => { e.preventDefault(); addNode(sop, "before"); };
+        cell.querySelector(".plus-left").onclick = (e) => { e.preventDefault(); addNode(sop, "after"); };
+        colEl.appendChild(cell);
+      });
+      flowEl.appendChild(colEl);
+    });
+    root.appendChild(flowEl);
+    return root;
   },
 
   // لوجو الشركة — بيتضاف مرة واحدة بس من هنا، وبيظهر تلقائيًا في كل الطباعات بعد كده
