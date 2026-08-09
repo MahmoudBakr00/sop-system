@@ -7,12 +7,12 @@
 // يلتقط عنصر الـ HTML كصورة واحدة عالية الدقة، ويقصّه على شكل صفحات A4 (بدون أي
 // اعتماد على نصوص جسPDF الداخلية) — ده اللي بيمنع تشويه الحروف العربية اللي بيحصل
 // مع doc.html()'s autoPaging لإنها بتحاول ترسم نص حقيقي بخط لاتيني افتراضي.
-async function renderPagedPdf({ sheet, orientation = "p", filename, scale = 2, footerEl = null, format = "a4", singlePage = false }) {
+async function renderPagedPdf({ sheet, orientation = "p", filename, scale = 2, footerEl = null, format = "a4", singlePage = false, rowSelector = null }) {
   const canvas = await html2canvas(sheet, { scale, useCORS: true, backgroundColor: "#ffffff" });
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "pt", format, orientation });
-  const margin = 18;
+  const margin = 28.35; // 1 سم بالظبط (1cm = 72/2.54 pt) — نفس المسافة من كل الاتجاهات الأربعة
   const pageW = doc.internal.pageSize.getWidth() - margin * 2;
   const fullPageH = doc.internal.pageSize.getHeight() - margin * 2;
 
@@ -51,10 +51,24 @@ async function renderPagedPdf({ sheet, orientation = "p", filename, scale = 2, f
   const pxPerPt = canvas.width / pageW;       // px-per-pt عند نفس عرض الصفحة
   const pageHeightPx = Math.floor(contentPageH * pxPerPt);
 
+  // حدود نهاية كل صف (لو اتحددت) — عشان التقسيم بين الصفحات يحصل عند نهاية صف كامل مش وسط الكلام
+  let rowBottoms = null;
+  if (rowSelector) {
+    const sheetRect = sheet.getBoundingClientRect();
+    rowBottoms = Array.from(sheet.querySelectorAll(rowSelector))
+      .map(r => Math.round((r.getBoundingClientRect().bottom - sheetRect.top) * scale))
+      .filter(v => v > 0);
+  }
+
   let renderedPx = 0;
   let pageIndex = 0;
   while (renderedPx < canvas.height) {
-    const sliceHeightPx = Math.min(pageHeightPx, canvas.height - renderedPx);
+    let sliceEnd = Math.min(renderedPx + pageHeightPx, canvas.height);
+    if (rowBottoms && rowBottoms.length && sliceEnd < canvas.height) {
+      const candidates = rowBottoms.filter(b => b > renderedPx && b <= sliceEnd);
+      if (candidates.length) sliceEnd = candidates[candidates.length - 1];
+    }
+    const sliceHeightPx = sliceEnd - renderedPx;
 
     const pageCanvas = document.createElement("canvas");
     pageCanvas.width = canvas.width;
@@ -72,11 +86,59 @@ async function renderPagedPdf({ sheet, orientation = "p", filename, scale = 2, f
       doc.addImage(footerData, "PNG", margin, footerY, pageW, footerHPt);
     }
 
-    renderedPx += sliceHeightPx;
+    renderedPx = sliceEnd;
     pageIndex++;
   }
 
   doc.save(filename);
+}
+
+// يصغّر خط ومسافات الجدول (بدون ما يلمس عمود الصورة) عشان المحتوى كله
+// يتحشر طبيعي في صفحة واحدة بعرض كامل، بدل ما نصغّر الصورة النهائية المُصوّرة
+// (اللي كانت بتسيب فراغات على الجنبين). بيقيس الطول الفعلي ويحسب نسبة التصغير المطلوبة.
+async function fitSheetToOnePage(sheet, orientation, format) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format, orientation });
+  const margin = 28.35; // نفس هامش renderPagedPdf (1 سم)
+  const pageW = doc.internal.pageSize.getWidth() - margin * 2;
+  const pageH = doc.internal.pageSize.getHeight() - margin * 2;
+
+  const sheetWidthPx = sheet.offsetWidth;
+  const idealHeightPx = sheetWidthPx * (pageH / pageW);
+  const actualHeightPx = sheet.scrollHeight;
+
+  if (actualHeightPx <= idealHeightPx) return; // أصلًا هيتحشر عادي، مش محتاج تصغير
+
+  let ratio = Math.max(idealHeightPx / actualHeightPx, 0.4); // مايصغرش عن 40% من حجمه الأصلي عشان يفضل مقروء
+  applySheetScale(sheet, ratio);
+
+  await new Promise(r => requestAnimationFrame(r));
+  const after = sheet.scrollHeight;
+  if (after > idealHeightPx * 1.03) {
+    const extra = Math.max(idealHeightPx / after, 0.85);
+    applySheetScale(sheet, ratio * extra);
+  }
+}
+
+function applySheetScale(sheet, ratio) {
+  sheet.querySelectorAll(".xsheet-fit-style").forEach(s => s.remove());
+  const style = document.createElement("style");
+  style.className = "xsheet-fit-style";
+  style.textContent = `
+    .xsheet-table{ font-size:${Math.max(16 * ratio, 9).toFixed(1)}px !important; }
+    .xsheet-table thead th{ font-size:${Math.max(15 * ratio, 9).toFixed(1)}px !important; }
+    .xsheet-table td, .xsheet-table th{
+      padding:${Math.max(10 * ratio, 4).toFixed(1)}px ${Math.max(12 * ratio, 4).toFixed(1)}px !important;
+      line-height:${Math.max(1.5 * ratio, 1.15).toFixed(2)} !important;
+    }
+    .xsheet-table .xsheet-img-cell{ padding:6px !important; } /* عمود الصورة يفضل زي ما هو */
+    .xsheet-info, .xsheet-sign{ font-size:${Math.max(15 * ratio, 9).toFixed(1)}px !important; }
+    .xsheet-info td, .xsheet-info th, .xsheet-sign td, .xsheet-sign th{
+      padding:${Math.max(10 * ratio, 4).toFixed(1)}px ${Math.max(12 * ratio, 4).toFixed(1)}px !important;
+    }
+    .xsheet-bar{ font-size:${Math.max(15 * ratio, 9).toFixed(1)}px !important; padding:${Math.max(10 * ratio, 4).toFixed(1)}px 16px !important; }
+  `;
+  sheet.appendChild(style);
 }
 
 // كود الفورم الثابت اللي بيظهر أسفل كل صفحة مطبوعة
@@ -172,15 +234,15 @@ const PdfExport = {
       <table class="xsheet-table">
         <thead>
           <tr>
-            <th style="width:3%;">م<br/><span class="en">No.</span></th>
-            <th style="width:10%;">الخطوات<br/><span class="en">Steps</span></th>
-            <th style="width:11%;">محتوى الفحص<br/><span class="en">Inspection Content</span></th>
-            <th style="width:8%;">العدة<br/><span class="en">Tools</span></th>
-            <th style="width:15%;">الفحص القياسي<br/><span class="en">Standard Inspection</span></th>
-            <th style="width:15%;">متطلبات العمل<br/><span class="en">Work Requirements</span></th>
-            <th style="width:13%;">الصور<br/><span class="en">Photos</span></th>
-            <th style="width:9%;">إجراءات السلامة<br/><span class="en">Safety</span></th>
-            <th style="width:6%;">معدل التكرار<br/><span class="en">Repetition</span></th>
+            <th style="width:2%;">م<br/><span class="en">No.</span></th>
+            <th style="width:8%;">الخطوات<br/><span class="en">Steps</span></th>
+            <th style="width:14%;">محتوى الفحص<br/><span class="en">Inspection Content</span></th>
+            <th style="width:7%;">العدة<br/><span class="en">Tools</span></th>
+            <th style="width:16%;">الفحص القياسي<br/><span class="en">Standard Inspection</span></th>
+            <th style="width:18%;">متطلبات العمل<br/><span class="en">Work Requirements</span></th>
+            <th style="width:12%;">الصور<br/><span class="en">Photos</span></th>
+            <th style="width:8%;">إجراءات السلامة<br/><span class="en">Safety</span></th>
+            <th style="width:5%;">معدل التكرار<br/><span class="en">Repetition</span></th>
             <th style="width:10%;">الإجراء عند الرفض<br/><span class="en">Action if Rejected</span></th>
           </tr>
         </thead>
@@ -254,6 +316,9 @@ const PdfExport = {
     if (onProgress) onProgress("جاري تجهيز الصور...");
     await waitForImages(sheet);
 
+    if (onProgress) onProgress("جاري ضبط المقاس عشان يتحشر في صفحة واحدة...");
+    await fitSheetToOnePage(sheet, "l", "a3");
+
     if (onProgress) onProgress("جاري إنشاء ملف PDF...");
     await renderPagedPdf({
       sheet,
@@ -262,6 +327,7 @@ const PdfExport = {
       filename: `${(sop.code || "SOP")}_table-sheet.pdf`,
       scale: 2,
       footerEl: buildFormFooter(),
+      rowSelector: "#xsheet-body tr",
       singlePage: true,
     });
     root.innerHTML = "";
