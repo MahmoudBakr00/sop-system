@@ -178,13 +178,18 @@ const PdfExport = {
       rejected_by_director: "مرفوض من الدايركتور / Rejected by Director",
     };
 
+    const rejectionComment = sop.approval_status === "rejected_by_head" ? sop.head_comment
+      : sop.approval_status === "rejected_by_director" ? sop.director_comment : null;
+    const rejectionBy = sop.approval_status === "rejected_by_head" ? "الهيد"
+      : sop.approval_status === "rejected_by_director" ? "الدايركتور" : null;
+
     sheet.innerHTML = `
       <div class="xsheet-head">
         ${logoUrl ? `<img class="xsheet-logo" src="${esc(logoUrl)}" crossorigin="anonymous"/>` : `<div class="xsheet-logo"></div>`}
         <div class="xsheet-approvals-mini">
-          <div><b>إعداد<br/>Prepared</b><br/>${esc(sop.created_by_name || "-")}</div>
-          <div><b>مراجعة (هيد)<br/>Reviewed</b><br/>${esc(sop.head_reviewed_by ? "✔" : "-")}</div>
-          <div><b>اعتماد (دايركتور)<br/>Approved</b><br/>${esc(sop.approved_by || "لسه")}${sop.approved_at ? ` — ${esc(sop.approved_at)}` : ""}</div>
+          <div><b>إعداد</b><br/>${esc(sop.created_by_name || "-")}</div>
+          <div><b>مراجعة</b><br/>${esc(sop.head_reviewed_by ? "✔" : "-")}</div>
+          <div><b>اعتماد</b><br/>${esc(sop.approved_by || "لم يُعتمد بعد")}${sop.approved_at ? ` — ${esc(sop.approved_at)}` : ""}</div>
         </div>
         <div class="xsheet-title">
           <h1>${esc(sop.title_ar || sop.title)}</h1>
@@ -196,12 +201,18 @@ const PdfExport = {
         </div>
       </div>
 
+      ${rejectionComment ? `
+        <div class="xsheet-bar xsheet-reject-bar">
+          <b>سبب الرفض (${esc(rejectionBy)}):</b> ${esc(rejectionComment)}
+        </div>
+      ` : ""}
+
       <table class="xsheet-info">
         <tr>
-          <th${sop.video_url ? ' style="width:110px;"' : ""}>${sop.video_url ? `فيديو الفحص/التجميع<br/><span class="en">Video — Scan</span>` : `المسؤولية<br/><span class="en">Responsibility</span>`}</th>
+          <th${sop.video_url ? ' style="width:110px;"' : ""}>${sop.video_url ? `فيديو الفحص<br/><span class="en">Video — Scan</span>` : `المسؤولية<br/><span class="en">Responsibility</span>`}</th>
           <th>بيئة الفحص<br/><span class="en">Inspection Environment</span></th>
           <th>عدد مرات الفحص<br/><span class="en">Inspection Frequency</span></th>
-          <th>العدة<br/><span class="en">Tools</span></th>
+          <th>المعدات المستخدمة<br/><span class="en">Equipment Used</span></th>
           <th>الخط<br/><span class="en">Line</span></th>
           <th>حالة الاعتماد<br/><span class="en">Approval Status</span></th>
         </tr>
@@ -227,7 +238,7 @@ const PdfExport = {
             <th style="width:2%;">م<br/><span class="en">No.</span></th>
             <th style="width:8%;">الخطوات<br/><span class="en">Steps</span></th>
             <th style="width:14%;">محتوى الفحص<br/><span class="en">Inspection Content</span></th>
-            <th style="width:7%;">العدة<br/><span class="en">Tools</span></th>
+            <th style="width:7%;">المعدات<br/><span class="en">Equipment</span></th>
             <th style="width:16%;">الفحص القياسي<br/><span class="en">Standard Inspection</span></th>
             <th style="width:18%;">متطلبات العمل<br/><span class="en">Work Requirements</span></th>
             <th style="width:12%;">الصور<br/><span class="en">Photos</span></th>
@@ -350,11 +361,19 @@ const PdfExport = {
       </div>
       <table class="psheet-approvals">
         <tr>
-          <td><b>أنشأ (Created)</b><br/>${esc(sop.created_by_name || "-")}<br/>${sop.created_at ? new Date(sop.created_at).toLocaleDateString("ar-EG") : ""}</td>
-          <td><b>آخر تعديل (Updated)</b><br/>${esc(sop.updated_by_name || "-")}<br/>${sop.updated_at ? new Date(sop.updated_at).toLocaleDateString("ar-EG") : ""}</td>
-          <td><b>اعتماد (Approved)</b><br/>${esc(sop.approved_by || "لسه ما اتعمدتش")}<br/>${sop.approved_at ? new Date(sop.approved_at).toLocaleDateString("ar-EG") : ""}</td>
+          <td><b>إعداد</b><br/>${esc(sop.created_by_name || "-")}<br/>${sop.created_at ? new Date(sop.created_at).toLocaleDateString("ar-EG") : ""}</td>
+          <td><b>مراجعة</b><br/>${esc(sop.head_reviewed_by ? "تمت المراجعة" : "لم تتم المراجعة بعد")}<br/>${sop.head_reviewed_at ? new Date(sop.head_reviewed_at).toLocaleDateString("ar-EG") : ""}</td>
+          <td><b>اعتماد</b><br/>${esc(sop.approved_by || "لم يُعتمد بعد")}<br/>${sop.approved_at ? new Date(sop.approved_at).toLocaleDateString("ar-EG") : ""}</td>
         </tr>
       </table>
+
+      ${(() => {
+        const comment = sop.approval_status === "rejected_by_head" ? sop.head_comment
+          : sop.approval_status === "rejected_by_director" ? sop.director_comment : null;
+        const by = sop.approval_status === "rejected_by_head" ? "الهيد"
+          : sop.approval_status === "rejected_by_director" ? "الدايركتور" : null;
+        return comment ? `<div class="psheet-block" style="border-color:#a3372c; color:#7a281f;"><b>سبب الرفض (${esc(by)}):</b> ${esc(comment)}</div>` : "";
+      })()}
       ${sop.video_url ? `
         <div class="psheet-video">
           <img class="qr-target" data-video="${esc(sop.video_url)}" />
