@@ -194,17 +194,11 @@ const PdfExport = {
           Ver. ${esc(sop.version || 1)}<br/>
           <b>NO. ${esc(sop.code || "بدون كود")}</b>
         </div>
-        ${sop.video_url ? `
-          <div class="xsheet-video-inline">
-            <img class="qr-target" data-video="${esc(sop.video_url)}" />
-            <span>امسح لتشغيل الفيديو<br/><span class="en">Scan for video</span></span>
-          </div>
-        ` : ""}
       </div>
 
       <table class="xsheet-info">
         <tr>
-          <th>المسؤولية<br/><span class="en">Responsibility</span></th>
+          <th${sop.video_url ? ' style="width:110px;"' : ""}>${sop.video_url ? `فيديو الفحص/التجميع<br/><span class="en">Video — Scan</span>` : `المسؤولية<br/><span class="en">Responsibility</span>`}</th>
           <th>بيئة الفحص<br/><span class="en">Inspection Environment</span></th>
           <th>عدد مرات الفحص<br/><span class="en">Inspection Frequency</span></th>
           <th>العدة<br/><span class="en">Tools</span></th>
@@ -212,7 +206,7 @@ const PdfExport = {
           <th>حالة الاعتماد<br/><span class="en">Approval Status</span></th>
         </tr>
         <tr>
-          <td>${esc(roles || "-")}</td>
+          <td>${sop.video_url ? `<img class="qr-target xsheet-info-qr" data-video="${esc(sop.video_url)}" />` : esc(roles || "-")}</td>
           <td>${esc(sop.inspection_environment || "-")}</td>
           <td>${esc(sop.inspection_frequency || "-")}</td>
           <td>${esc(toolsTxt || "-")}</td>
