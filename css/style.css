@@ -213,6 +213,27 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 }
 .sop-video-box .hint{display:inline-block; margin-top:6px;}
 
+.notif-bell{position:relative;}
+.notif-bell #notif-btn{
+  background:none; border:none; color:var(--paper); font-size:17px; cursor:pointer;
+  position:relative; padding:4px 8px;
+}
+.notif-count{
+  position:absolute; top:-2px; left:-2px; background:var(--danger); color:#fff;
+  font-size:10px; font-weight:700; border-radius:50%; min-width:16px; height:16px;
+  display:inline-flex; align-items:center; justify-content:center; padding:0 3px;
+}
+.notif-panel{
+  position:absolute; top:calc(100% + 8px); left:0; width:320px; max-height:400px; overflow-y:auto;
+  background:#fff; color:#111; border-radius:var(--radius); box-shadow:0 8px 24px rgba(0,0,0,.25);
+  border:1px solid #e4ddc9; z-index:50;
+}
+.notif-head{display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid #eee;}
+.notif-item{display:block; padding:10px 12px; border-bottom:1px solid #f1ede0; text-decoration:none; color:#111; font-size:12.5px;}
+.notif-item.unread{background:#fdf6e8; font-weight:600;}
+.notif-item:hover{background:#f7f3e6;}
+.notif-empty{padding:16px; text-align:center;}
+
 /* ---------- Editor form ---------- */
 .form-card{
   background:#fff; border:1px solid #e4ddc9; border-radius:var(--radius);
@@ -308,44 +329,55 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 
 /* ---------- Table-style print sheet (Excel-like, one row per step) ---------- */
 .xsheet{
-  width:1500px; background:#fff; padding:20px 24px; font-family:var(--font-body);
+  width:1900px; background:#fff; padding:24px 28px; font-family:var(--font-body);
   direction:rtl; color:#111;
 }
 .xsheet-head{
   display:flex; align-items:center; justify-content:space-between; gap:16px;
-  border:2px solid #111; padding:10px 16px; margin-bottom:8px;
+  border:2px solid #111; padding:12px 18px; margin-bottom:10px;
 }
-.xsheet-logo{max-width:80px; max-height:60px; object-fit:contain;}
-.xsheet-approvals-mini{display:flex; gap:14px; font-size:12px; border-left:1px solid #ccc; padding-left:14px;}
+.xsheet-logo{max-width:90px; max-height:70px; object-fit:contain;}
+.xsheet-approvals-mini{display:flex; gap:16px; font-size:14px; border-left:1px solid #ccc; padding-left:16px;}
 .xsheet-title{flex:1; text-align:center;}
-.xsheet-title h1{font-family:var(--font-display); font-size:24px; margin:0;}
-.xsheet-sub{font-size:12px; color:#666;}
-.xsheet-docno{font-size:12px; text-align:left; border-right:1px solid #ccc; padding-right:14px; white-space:nowrap;}
+.xsheet-title h1{font-family:var(--font-display); font-size:28px; margin:0;}
+.xsheet-sub{font-size:13px; color:#666;}
+.xsheet-docno{font-size:14px; text-align:left; border-right:1px solid #ccc; padding-right:16px; white-space:nowrap;}
 
-.xsheet-info{width:100%; border-collapse:collapse; margin-bottom:14px; font-size:13px;}
-.xsheet-info th, .xsheet-info td{border:1.5px solid #111; padding:8px 10px; text-align:center;}
-.xsheet-info th{background:#f1ede0; font-family:var(--font-mono); font-size:11px;}
+.xsheet-info{width:100%; border-collapse:collapse; margin-bottom:10px; font-size:15px;}
+.xsheet-info th, .xsheet-info td{border:1.5px solid #111; padding:10px 12px; text-align:center;}
+.xsheet-info th{background:#f1ede0; font-family:var(--font-display); font-size:13px; line-height:1.5;}
+
+.xsheet-bar{
+  border:1.5px solid var(--blueprint-800); background:#f1ede0; color:var(--blueprint-900);
+  padding:10px 16px; margin-bottom:10px; font-size:15px; border-radius:4px;
+}
 
 /* الجدول الرئيسي: صف لكل خطوة، كل تفصيلة في خانة منفصلة، زي إكسيل بالظبط */
-.xsheet-table{width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed;}
+.xsheet-table{width:100%; border-collapse:collapse; font-size:16px; table-layout:fixed; margin-bottom:12px;}
 .xsheet-table th, .xsheet-table td{
-  border:1px solid #999; padding:8px 9px; text-align:right; vertical-align:top;
-  word-wrap:break-word; overflow-wrap:break-word;
+  border:1px solid #999; padding:12px 13px; text-align:right; vertical-align:top;
+  word-wrap:break-word; overflow-wrap:break-word; line-height:1.5;
 }
 .xsheet-table thead th{
-  background:var(--blueprint-800); color:#fff; font-size:11.5px; text-align:center;
-  font-family:var(--font-display);
+  background:var(--blueprint-800); color:#fff; font-size:15px; text-align:center;
+  font-family:var(--font-display); line-height:1.6;
 }
-.xsheet-stage-row{
-  background:#f1ede0 !important; font-weight:700; text-align:center !important;
-  font-family:var(--font-display); font-size:13px; color:var(--blueprint-800);
+.xsheet-table th .en, .xsheet-info th .en, .xsheet-sign th .en{
+  display:block; font-family:var(--font-mono); font-size:11px; font-weight:400;
+  color:#cfd9e3; text-transform:uppercase; letter-spacing:.03em; margin-top:2px;
 }
 .xsheet-critical-row td{background:#fdf6f4;}
 .xsheet-critical-row td:nth-child(2){border-right:4px solid #a3372c;}
 
 /* حجم صورة موحّد وواضح لكل الخطوات */
-.xsheet-img-cell{text-align:center; padding:4px;}
-.xsheet-thumb{width:140px; height:105px; object-fit:cover; border-radius:4px; border:1px solid #ccc; display:block; margin:0 auto;}
+.xsheet-img-cell{text-align:center; padding:6px;}
+.xsheet-thumb{width:170px; height:125px; object-fit:cover; border-radius:4px; border:1px solid #ccc; display:block; margin:0 auto;}
+
+/* جدول التوقيعات في آخر الصفحة */
+.xsheet-sign{width:100%; border-collapse:collapse; font-size:15px; margin-bottom:10px;}
+.xsheet-sign th, .xsheet-sign td{border:1.5px solid #111; padding:10px 12px; text-align:center;}
+.xsheet-sign th{background:var(--blueprint-800); color:#fff; font-family:var(--font-display); line-height:1.6;}
+.xsheet-sign td:last-child{height:44px;}
 
 .video-row{display:flex; gap:8px; align-items:center;}
 .video-row input{flex:1;}
@@ -401,6 +433,16 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 }
 .save-bar .hint{color:#e4ddc9; margin:0; flex:1; min-width:200px;}
 .btn-lg{padding:10px 22px; font-size:14.5px;}
+
+.workflow-box{border-right:4px solid var(--blueprint-800);}
+.workflow-status{
+  display:inline-block; font-weight:700; padding:8px 14px; border-radius:var(--radius);
+  background:var(--paper-dim); margin-bottom:8px; font-size:13.5px;
+}
+.workflow-status.status-approved{background:#e6f3ea; color:var(--ok);}
+.workflow-status.status-pending_head, .workflow-status.status-pending_director{background:#fdf3e0; color:#8a6414;}
+.workflow-status.status-rejected_by_head, .workflow-status.status-rejected_by_director{background:#fdf1ef; color:var(--danger);}
+.workflow-actions textarea{width:100%; min-height:60px; margin-bottom:8px;}
 
 .identity-box{
   background:var(--paper-dim); border:1px dashed var(--blueprint-line); border-radius:var(--radius);
