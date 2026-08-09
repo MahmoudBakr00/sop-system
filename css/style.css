@@ -348,6 +348,10 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 .xsheet-info th{background:#f1ede0; font-family:var(--font-display); font-size:13px; line-height:1.5;}
 .xsheet-info-qr{width:90px; height:90px; display:block; margin:0 auto;}
 
+.xsheet-reject-bar{
+  border-color:var(--danger) !important; background:#fdf1ef !important; color:#7a281f !important;
+}
+
 .xsheet-bar{
   border:1.5px solid var(--blueprint-800); background:#f1ede0; color:var(--blueprint-900);
   padding:10px 16px; margin-bottom:10px; font-size:15px; border-radius:4px;
