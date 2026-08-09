@@ -194,6 +194,12 @@ const PdfExport = {
           Ver. ${esc(sop.version || 1)}<br/>
           <b>NO. ${esc(sop.code || "بدون كود")}</b>
         </div>
+        ${sop.video_url ? `
+          <div class="xsheet-video-inline">
+            <img class="qr-target" data-video="${esc(sop.video_url)}" />
+            <span>امسح لتشغيل الفيديو<br/><span class="en">Scan for video</span></span>
+          </div>
+        ` : ""}
       </div>
 
       <table class="xsheet-info">
@@ -214,16 +220,6 @@ const PdfExport = {
           <td>${esc(approvalLabels[sop.approval_status] || sop.approval_status || "-")}</td>
         </tr>
       </table>
-
-      ${sop.video_url ? `
-        <div class="xsheet-video-bar">
-          <img class="qr-target" data-video="${esc(sop.video_url)}" />
-          <div>
-            <b>فيديو الفحص / التجميع — امسح الكود لتشغيله</b><br/>
-            <span class="en">Scan to watch inspection / assembly video</span>
-          </div>
-        </div>
-      ` : ""}
 
       ${sop.pre_work_procedure ? `
         <div class="xsheet-bar">
