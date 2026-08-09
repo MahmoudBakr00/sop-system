@@ -356,11 +356,12 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 .xsheet-table{width:100%; border-collapse:collapse; font-size:16px; table-layout:fixed; margin-bottom:12px;}
 .xsheet-table th, .xsheet-table td{
   border:1px solid #999; padding:12px 13px; text-align:right; vertical-align:top;
-  word-wrap:break-word; overflow-wrap:break-word; line-height:1.5;
+  word-wrap:break-word; overflow-wrap:break-word; word-break:break-word;
+  line-height:1.5; overflow:hidden; max-width:0; /* max-width:0 + table-layout:fixed يجبر النص يفضل جوه عمودته */
 }
 .xsheet-table thead th{
   background:var(--blueprint-800); color:#fff; font-size:15px; text-align:center;
-  font-family:var(--font-display); line-height:1.6;
+  font-family:var(--font-display); line-height:1.6; max-width:none;
 }
 .xsheet-table th .en, .xsheet-info th .en, .xsheet-sign th .en{
   display:block; font-family:var(--font-mono); font-size:11px; font-weight:400;
@@ -369,9 +370,9 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 .xsheet-critical-row td{background:#fdf6f4;}
 .xsheet-critical-row td:nth-child(2){border-right:4px solid #a3372c;}
 
-/* حجم صورة موحّد وواضح لكل الخطوات */
-.xsheet-img-cell{text-align:center; padding:6px;}
-.xsheet-thumb{width:170px; height:125px; object-fit:cover; border-radius:4px; border:1px solid #ccc; display:block; margin:0 auto;}
+/* حجم صورة موحّد وواضح لكل الخطوات، محصور جوه خانته */
+.xsheet-img-cell{text-align:center; padding:6px; overflow:hidden;}
+.xsheet-thumb{width:100%; max-width:170px; height:125px; object-fit:cover; border-radius:4px; border:1px solid #ccc; display:block; margin:0 auto;}
 
 /* جدول التوقيعات في آخر الصفحة */
 .xsheet-sign{width:100%; border-collapse:collapse; font-size:15px; margin-bottom:10px;}
@@ -389,6 +390,22 @@ main{max-width:1080px; margin:0 auto; padding:28px 24px 80px;}
 }
 
 /* ---------- Station flow dashboard (ordered by station_no) ---------- */
+.station-flow-grid{display:flex; align-items:center; gap:0; overflow-x:auto; padding:30px 10px;}
+.station-col{display:flex; flex-direction:column; gap:26px; align-items:center;}
+.station-cell{position:relative; padding:14px;}
+.node-plus{
+  position:absolute; width:22px; height:22px; border-radius:50%;
+  background:var(--amber); color:var(--blueprint-900); border:none; font-weight:900; font-size:14px;
+  cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:2;
+  box-shadow:0 1px 4px rgba(0,0,0,.25); line-height:1;
+}
+.node-plus:hover{background:var(--amber-dark, #c8941f);}
+.node-plus.plus-top{top:-4px; left:50%; transform:translateX(-50%);}
+.node-plus.plus-bottom{bottom:-4px; left:50%; transform:translateX(-50%);}
+.node-plus.plus-right{right:-4px; top:50%; transform:translateY(-50%);}
+.node-plus.plus-left{left:-4px; top:50%; transform:translateY(-50%);}
+.station-cell .station-node{text-decoration:none; display:block;}
+
 .station-flow{
   display:flex; align-items:center; flex-wrap:nowrap; gap:0; padding:18px 4px;
   overflow-x:auto;
