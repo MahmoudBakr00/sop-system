@@ -23,8 +23,11 @@ const Auth = {
   },
 
   isLoggedIn() { return !!this.session; },
-  canEdit() { return this.profile && (this.profile.role === "admin" || this.profile.role === "editor"); },
+  canEdit() { return this.profile && ["admin", "editor", "engineer"].includes(this.profile.role); },
   isAdmin() { return this.profile && this.profile.role === "admin"; },
+  isHead() { return this.profile && (this.profile.role === "head" || this.profile.role === "admin"); },
+  isDirector() { return this.profile && (this.profile.role === "director" || this.profile.role === "admin"); },
+  displayName() { return this.profile?.full_name || this.session?.user?.email || "مستخدم"; },
 
   async signIn(email, password) {
     const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
