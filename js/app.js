@@ -107,7 +107,7 @@ const App = {
               <div class="hint">${new Date(n.created_at).toLocaleString("ar-EG")}</div>
             </a>
           `).join("")}
-        ` : `<div class="notif-empty hint">مفيش إشعارات</div>`;
+        ` : `<div class="notif-empty hint">لا توجد إشعارات</div>`;
         panel.querySelectorAll(".notif-item").forEach(item => {
           item.addEventListener("click", async () => { await DB.markNotificationRead(item.dataset.id); });
         });
@@ -139,7 +139,7 @@ const App = {
       <div class="field"><label>كلمة المرور</label><input id="a-pass" type="password"/></div>
       <button class="btn btn-primary" id="a-submit" style="width:100%;">دخول</button>
       <div class="auth-error" id="a-error" style="display:none;"></div>
-      <div class="auth-toggle">مفيش حساب؟ <a href="#" id="a-signup-link">إنشاء حساب جديد</a></div>
+      <div class="auth-toggle">ليس لديك حساب؟ <a href="#" id="a-signup-link">إنشاء حساب جديد</a></div>
     `;
     let mode = "login";
     box.querySelector("#a-signup-link").onclick = (e) => {
@@ -147,7 +147,7 @@ const App = {
       mode = mode === "login" ? "signup" : "login";
       box.querySelector("#a-submit").textContent = mode === "login" ? "دخول" : "إنشاء حساب";
       box.querySelector("h1").textContent = mode === "login" ? "تسجيل الدخول" : "حساب جديد";
-      box.querySelector("#a-signup-link").textContent = mode === "login" ? "إنشاء حساب جديد" : "عندي حساب بالفعل";
+      box.querySelector("#a-signup-link").textContent = mode === "login" ? "إنشاء حساب جديد" : "لدي حساب بالفعل";
     };
     box.querySelector("#a-submit").onclick = async () => {
       const email = box.querySelector("#a-email").value.trim();
@@ -235,9 +235,9 @@ const App = {
     box.innerHTML = `
       <div class="form-card">
         <h2 style="margin-top:0;">فلو الخط — ترتيب الـ SOPs (المحطات) ورا بعض</h2>
-        <p class="hint">دوس على أي زرار "+" حوالين أي محطة: يمين/شمال بيضيف محطة قبلها/بعدها في التسلسل، فوق/تحت بيضيف محطة تشتغل بالتوازي معاها في نفس النقطة.</p>
+        <p class="hint">اضغط أي زر "+" حول أي محطة: يمين/يسار يضيف محطة قبلها أو بعدها في التسلسل، وأعلى/أسفل يضيف محطة تعمل بالتوازي معها في نفس النقطة.</p>
         <div class="field" style="max-width:280px;">
-          <label>اختار الخط</label>
+          <label>اختر الخط</label>
           <select id="line-select">
             ${lines.map(l => `<option value="${attr(l)}">${esc(l)}</option>`).join("")}
           </select>
@@ -357,7 +357,7 @@ const App = {
       <div class="logo-settings-box">
         ${settings.logo_url
           ? `<img src="${esc(settings.logo_url)}" class="logo-preview"/>`
-          : `<div class="logo-preview logo-empty">مفيش لوجو لسه</div>`}
+          : `<div class="logo-preview logo-empty">لا يوجد شعار بعد</div>`}
         <div>
           <b>لوجو الشركة</b>
           <p class="hint">بيتضاف مرة واحدة بس هنا، وبيظهر تلقائيًا على كل الأوراق المطبوعة بعد كده.</p>
@@ -485,7 +485,7 @@ const App = {
       <div class="tags" style="margin-top:8px;">
         <span>أنشأ: <b>${esc(sop.created_by_name || "-")}</b> (${fmtDate(sop.created_at)})</span>
         <span>آخر تعديل: <b>${esc(sop.updated_by_name || "-")}</b> (${fmtDate(sop.updated_at)})</span>
-        <span>اعتماد: <b>${esc(sop.approved_by || "لسه ما اتعمدتش")}</b> ${sop.approved_at ? `(${fmtDate(sop.approved_at)})` : ""}</span>
+        <span>اعتماد: <b>${esc(sop.approved_by || "لم يُعتمد بعد")}</b> ${sop.approved_at ? `(${fmtDate(sop.approved_at)})` : ""}</span>
       </div>
       ${sop.video_url ? videoBoxHtml(sop.video_url) : ""}
     `;
