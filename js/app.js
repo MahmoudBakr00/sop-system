@@ -59,12 +59,72 @@ const App = {
       who.className = "who";
       who.textContent = `${Auth.profile?.full_name || Auth.session.user.email} (${roleLabel(Auth.profile?.role)})`;
       nav.appendChild(who);
+
+      const bell = document.createElement("div");
+      bell.className = "notif-bell";
+      bell.innerHTML = `<button id="notif-btn">🔔<span class="notif-count" style="display:none;"></span></button><div class="notif-panel" style="display:none;"></div>`;
+      nav.appendChild(bell);
+      this.wireNotifications(bell);
+
       const out = document.createElement("button");
       out.textContent = "خروج";
       out.onclick = () => Auth.signOut();
       nav.appendChild(out);
     }
     return bar;
+  },
+
+  // ---------------- جرس الإشعارات ----------------
+  async wireNotifications(bell) {
+    const btn = bell.querySelector("#notif-btn");
+    const countEl = bell.querySelector(".notif-count");
+    const panel = bell.querySelector(".notif-panel");
+    const userId = Auth.session?.user?.id;
+    if (!userId) return;
+
+    const refreshCount = async () => {
+      const c = await DB.unreadNotificationsCount(userId);
+      if (c > 0) { countEl.textContent = c > 9 ? "9+" : c; countEl.style.display = "inline-block"; }
+      else { countEl.style.display = "none"; }
+    };
+    await refreshCount();
+
+    btn.onclick = async () => {
+      const isHidden = panel.style.display === "none";
+      if (!isHidden) { panel.style.display = "none"; return; }
+      panel.style.display = "block";
+      panel.innerHTML = `<div class="spinner"></div>`;
+      try {
+        const items = await DB.listNotifications(userId);
+        panel.innerHTML = items.length ? `
+          <div class="notif-head">
+            <b>الإشعارات</b>
+            <button class="btn btn-sm btn-ghost" id="notif-mark-all">تعليم الكل كمقروء</button>
+          </div>
+          ${items.map(n => `
+            <a href="${n.sop_id ? `#/sop/${n.sop_id}/edit` : "#/"}" class="notif-item ${n.is_read ? "" : "unread"}" data-id="${n.id}">
+              <div>${esc(n.message)}</div>
+              <div class="hint">${new Date(n.created_at).toLocaleString("ar-EG")}</div>
+            </a>
+          `).join("")}
+        ` : `<div class="notif-empty hint">مفيش إشعارات</div>`;
+        panel.querySelectorAll(".notif-item").forEach(item => {
+          item.addEventListener("click", async () => { await DB.markNotificationRead(item.dataset.id); });
+        });
+        const markAllBtn = panel.querySelector("#notif-mark-all");
+        if (markAllBtn) markAllBtn.onclick = async () => {
+          await DB.markAllNotificationsRead(userId);
+          await refreshCount();
+          panel.querySelectorAll(".notif-item.unread").forEach(el => el.classList.remove("unread"));
+        };
+      } catch (e) {
+        panel.innerHTML = `<div class="hint">تعذر تحميل الإشعارات</div>`;
+      }
+      await refreshCount();
+    };
+    document.addEventListener("click", (ev) => {
+      if (!bell.contains(ev.target)) panel.style.display = "none";
+    });
   },
 
   // ---------------- Login ----------------
@@ -371,6 +431,27 @@ const App = {
     main.appendChild(header);
     wireVideoBox(header);
 
+    // حالة الموافقة
+    if (sop.approval_status) {
+      const statusLabels = {
+        draft: "مسودة", pending_head: "⏳ في انتظار مراجعة الهيد", pending_director: "⏳ في انتظار اعتماد الدايركتور",
+        approved: "✅ معتمد نهائيًا", rejected_by_head: "❌ مرفوض من الهيد", rejected_by_director: "❌ مرفوض من الدايركتور",
+      };
+      main.insertAdjacentHTML("beforeend", `
+        <div class="workflow-status status-${sop.approval_status}">${statusLabels[sop.approval_status] || sop.approval_status}</div>
+      `);
+    }
+
+    // إجراء قبل العمل
+    if (sop.pre_work_procedure) {
+      main.insertAdjacentHTML("beforeend", `
+        <div class="view-section">
+          <h2 class="section-title">إجراء قبل العمل (Pre-work)</h2>
+          <p>${esc(sop.pre_work_procedure)}</p>
+        </div>
+      `);
+    }
+
     // 4) الأدوات والمواد
     if (sop.tools && sop.tools.length) {
       const catLabel = { tool: "أداة", instrument: "جهاز قياس", material: "مادة" };
@@ -452,6 +533,34 @@ const App = {
       main.appendChild(stepsWrapEl);
     }
 
+    // إجراء بعد انتهاء العمل
+    if (sop.post_work_procedure) {
+      main.insertAdjacentHTML("beforeend", `
+        <div class="view-section">
+          <h2 class="section-title">إجراء بعد انتهاء العمل (Post-work)</h2>
+          <p>${esc(sop.post_work_procedure)}</p>
+        </div>
+      `);
+    }
+
+    // التوقيعات والملاحظات
+    if (sop.trainer_name || sop.inspector_name || sop.supervisor_name || sop.notes) {
+      main.insertAdjacentHTML("beforeend", `
+        <div class="view-section">
+          <h2 class="section-title">التوقيعات والمسؤوليات</h2>
+          <table class="rev-table">
+            <thead><tr><th>الدور</th><th>الاسم</th><th>الوظيفة</th></tr></thead>
+            <tbody>
+              ${sop.trainer_name ? `<tr><td>المدرب</td><td>${esc(sop.trainer_name)}</td><td>${esc(sop.trainer_position || "-")}</td></tr>` : ""}
+              ${sop.inspector_name ? `<tr><td>المفتش</td><td>${esc(sop.inspector_name)}</td><td>${esc(sop.inspector_position || "-")}</td></tr>` : ""}
+              ${sop.supervisor_name ? `<tr><td>المشرف</td><td>${esc(sop.supervisor_name)}</td><td>${esc(sop.supervisor_position || "-")}</td></tr>` : ""}
+            </tbody>
+          </table>
+          ${sop.notes ? `<p style="margin-top:10px;"><b>ملاحظات:</b> ${esc(sop.notes)}</p>` : ""}
+        </div>
+      `);
+    }
+
     // 9) المراجع
     if (sop.references && sop.references.length) {
       main.insertAdjacentHTML("beforeend", `
@@ -504,7 +613,10 @@ function wireVideoBox(_container) {
 }
 
 function roleLabel(role) {
-  return { admin: "أدمن", editor: "محرر", viewer: "مشاهد" }[role] || "مشاهد";
+  return {
+    admin: "أدمن", editor: "محرر", viewer: "مشاهد",
+    engineer: "مهندس", head: "هيد", director: "دايركتور",
+  }[role] || "مشاهد";
 }
 function stepRoleLabel(role) {
   return {
