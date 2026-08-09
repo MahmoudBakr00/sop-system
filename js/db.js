@@ -55,14 +55,16 @@ const DB = {
     }
     sop.stages = stages;
 
-    const [tools, refs, revisions] = await Promise.all([
+    const [tools, refs, revisions, approvals] = await Promise.all([
       this.listTools(sopId),
       this.listReferences(sopId),
       this.listRevisions(sopId),
+      this.listApprovals(sopId),
     ]);
     sop.tools = tools;
     sop.references = refs;
     sop.revisions = revisions;
+    sop.approvals = approvals;
 
     // أسماء المُنشئ وآخر معدِّل (بيتاخدوا تلقائي من الحساب، مفيش إدخال يدوي)
     const identityIds = [...new Set([sop.created_by, sop.updated_by].filter(Boolean))];
@@ -74,6 +76,57 @@ const DB = {
     }
 
     return sop;
+  },
+
+  // ---------- لوج الاعتمادات ----------
+  async listApprovals(sopId) {
+    const { data, error } = await supabaseClient
+      .from("sop_approvals")
+      .select("*, profiles(full_name)")
+      .eq("sop_id", sopId)
+      .order("created_at", { ascending: false });
+    if (error) return [];
+    return data;
+  },
+
+  // ---------- سايكل الموافقات: مهندس يرسل → هيد يراجع → دايركتور يعتمد ----------
+  async submitForReview(sopId) {
+    const { error } = await supabaseClient.rpc("submit_sop_for_review", { p_sop_id: sopId });
+    if (error) throw error;
+  },
+  async headDecide(sopId, approve, comment) {
+    const { error } = await supabaseClient.rpc("head_decide", {
+      p_sop_id: sopId, p_approve: approve, p_comment: comment || null,
+    });
+    if (error) throw error;
+  },
+  async directorDecide(sopId, approve, comment) {
+    const { error } = await supabaseClient.rpc("director_decide", {
+      p_sop_id: sopId, p_approve: approve, p_comment: comment || null,
+    });
+    if (error) throw error;
+  },
+
+  // ---------- الإشعارات ----------
+  async listNotifications(userId) {
+    const { data, error } = await supabaseClient
+      .from("notifications").select("*")
+      .eq("user_id", userId).order("created_at", { ascending: false }).limit(30);
+    if (error) throw error;
+    return data;
+  },
+  async unreadNotificationsCount(userId) {
+    const { count, error } = await supabaseClient
+      .from("notifications").select("id", { count: "exact", head: true })
+      .eq("user_id", userId).eq("is_read", false);
+    if (error) return 0;
+    return count || 0;
+  },
+  async markNotificationRead(id) {
+    await supabaseClient.from("notifications").update({ is_read: true }).eq("id", id);
+  },
+  async markAllNotificationsRead(userId) {
+    await supabaseClient.from("notifications").update({ is_read: true }).eq("user_id", userId).eq("is_read", false);
   },
 
   // ---------- كود تلقائي من اسم المحطة ----------
