@@ -10,6 +10,7 @@ const Editor = {
     await this.ensureSingleStage(sop);
     container.innerHTML = "";
     container.appendChild(this.buildHeaderForm(sop));
+    container.appendChild(this.buildWorkflowBox(sop));
 
     // زرار الحفظ الرئيسي — الوحيد اللي بيحدّث رقم الإصدار (Rev.)
     const saveBar = document.createElement("div");
@@ -114,12 +115,29 @@ const Editor = {
         <textarea id="f-safety" placeholder="مثال: نظارة واقية، قفازات مقاومة للحرارة، حذاء أمان...">${esc(sop.safety_notes)}</textarea>
       </div>
 
+      <div class="field-row">
+        <div class="field"><label>إجراء قبل العمل (Pre-work)</label><textarea id="f-pre" placeholder="مثال: شغّل معدات الفحص الأمني وتأكد من صلاحيتها">${esc(sop.pre_work_procedure)}</textarea></div>
+        <div class="field"><label>إجراء بعد انتهاء العمل (Post-work)</label><textarea id="f-post" placeholder="مثال: أوقف تشغيل الجهاز، ضع لوحات تعريف العملية">${esc(sop.post_work_procedure)}</textarea></div>
+      </div>
+
+      <h2 style="margin-top:16px;">التوقيعات والمسؤوليات</h2>
+      <div class="field-row">
+        <div class="field"><label>اسم المدرب</label><input id="f-trainer-name" value="${attr(sop.trainer_name)}"/></div>
+        <div class="field"><label>الوظيفة (Position)</label><input id="f-trainer-pos" value="${attr(sop.trainer_position)}"/></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>اسم المفتش</label><input id="f-inspector-name" value="${attr(sop.inspector_name)}"/></div>
+        <div class="field"><label>الوظيفة (Position)</label><input id="f-inspector-pos" value="${attr(sop.inspector_position)}"/></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>اسم المشرف</label><input id="f-supervisor-name" value="${attr(sop.supervisor_name)}"/></div>
+        <div class="field"><label>الوظيفة (Position)</label><input id="f-supervisor-pos" value="${attr(sop.supervisor_position)}"/></div>
+      </div>
+      <div class="field"><label>ملاحظات</label><textarea id="f-notes" placeholder="أي ملاحظات عامة على الـ SOP">${esc(sop.notes)}</textarea></div>
+
       <div class="identity-box">
         <div>📝 <b>أنشأ بواسطة:</b> ${esc(sop.created_by_name || "-")} — ${fmtDate(sop.created_at)}</div>
         <div>✏️ <b>آخر تعديل بواسطة:</b> ${esc(sop.updated_by_name || "-")} — ${fmtDate(sop.updated_at)}</div>
-        <div>✅ <b>اعتماد:</b> ${sop.approved_by ? `${esc(sop.approved_by)} — ${fmtDate(sop.approved_at)}` : "لسه ما اتعمدتش"}
-          ${Auth.isAdmin() ? `<button class="btn btn-sm btn-primary" id="approve-btn" style="margin-inline-start:8px;">${sop.approved_by ? "إعادة الاعتماد" : "✅ اعتماد الـ SOP"}</button>` : ""}
-        </div>
         <p class="hint" style="margin:6px 0 0;">الاسم والتاريخ بياخدهم النظام تلقائيًا من حساب المستخدم المسجّل دخول — مفيش إدخال يدوي.</p>
       </div>
 
@@ -145,20 +163,6 @@ const Editor = {
       ev.target.value = "";
     });
 
-    const approveBtn = card.querySelector("#approve-btn");
-    if (approveBtn) {
-      approveBtn.onclick = async () => {
-        try {
-          const name = Auth.profile?.full_name || Auth.session?.user?.email || "أدمن";
-          const updated = await DB.approveSop(sop.id, name);
-          await this.bump(sop.id, "اعتماد الـ SOP");
-          Object.assign(sop, updated);
-          toast("تم اعتماد الـ SOP");
-          await App.navigate(`#/sop/${sop.id}/edit`, true);
-        } catch (e) { toast(e.message, true); }
-      };
-    }
-
     card.querySelector("#save-header-btn").onclick = async () => {
       const stationNoRaw = card.querySelector("#f-station-no").value.trim();
       const payload = {
@@ -171,6 +175,15 @@ const Editor = {
         inspection_environment: card.querySelector("#f-env").value.trim() || null,
         video_url: card.querySelector("#f-video").value.trim() || null,
         safety_notes: card.querySelector("#f-safety").value.trim(),
+        pre_work_procedure: card.querySelector("#f-pre").value.trim() || null,
+        post_work_procedure: card.querySelector("#f-post").value.trim() || null,
+        trainer_name: card.querySelector("#f-trainer-name").value.trim() || null,
+        trainer_position: card.querySelector("#f-trainer-pos").value.trim() || null,
+        inspector_name: card.querySelector("#f-inspector-name").value.trim() || null,
+        inspector_position: card.querySelector("#f-inspector-pos").value.trim() || null,
+        supervisor_name: card.querySelector("#f-supervisor-name").value.trim() || null,
+        supervisor_position: card.querySelector("#f-supervisor-pos").value.trim() || null,
+        notes: card.querySelector("#f-notes").value.trim() || null,
       };
       try {
         const updated = await DB.updateSop(sop.id, payload);
@@ -189,6 +202,113 @@ const Editor = {
           toast(e.message, true);
         }
       }
+    };
+    return card;
+  },
+
+  // ---------------- صندوق سايكل الموافقات: إرسال للمراجعة / قرار الهيد / قرار الدايركتور ----------------
+  buildWorkflowBox(sop) {
+    const card = document.createElement("div");
+    card.className = "form-card workflow-box";
+    const fmtDate = (d) => d ? new Date(d).toLocaleString("ar-EG") : "-";
+    const statusLabels = {
+      draft: "مسودة — لسه ما اتبعتش للمراجعة",
+      pending_head: "⏳ في انتظار مراجعة الهيد",
+      pending_director: "⏳ في انتظار اعتماد الدايركتور",
+      approved: "✅ معتمد نهائيًا",
+      rejected_by_head: "❌ مرفوض من الهيد — يحتاج تعديل",
+      rejected_by_director: "❌ مرفوض من الدايركتور — يحتاج تعديل",
+    };
+    const stepLabels = {
+      submitted: "أُرسل للمراجعة", head_approved: "وافق الهيد", head_rejected: "رفض الهيد",
+      director_approved: "اعتمد الدايركتور", director_rejected: "رفض الدايركتور",
+    };
+
+    let actionsHtml = "";
+    if (Auth.canEdit() && ["draft", "rejected_by_head", "rejected_by_director"].includes(sop.approval_status)) {
+      actionsHtml = `<button class="btn btn-primary" id="submit-review-btn">📤 إرسال للمراجعة (الهيد)</button>`;
+    } else if (Auth.isHead() && sop.approval_status === "pending_head") {
+      actionsHtml = `
+        <textarea id="head-comment" placeholder="ملاحظة (اختياري)"></textarea>
+        <div class="editor-toolbar">
+          <button class="btn btn-primary" id="head-approve-btn">✅ موافقة — إرسال للدايركتور</button>
+          <button class="btn btn-danger" id="head-reject-btn">❌ رفض</button>
+        </div>
+      `;
+    } else if (Auth.isDirector() && sop.approval_status === "pending_director") {
+      actionsHtml = `
+        <textarea id="director-comment" placeholder="ملاحظة (اختياري)"></textarea>
+        <div class="editor-toolbar">
+          <button class="btn btn-primary" id="director-approve-btn">✅ اعتماد نهائي (إصدار فيرجن جديد)</button>
+          <button class="btn btn-danger" id="director-reject-btn">❌ رفض</button>
+        </div>
+      `;
+    }
+
+    card.innerHTML = `
+      <h2 style="margin-top:0;">سايكل الموافقات</h2>
+      <div class="workflow-status status-${sop.approval_status}">${statusLabels[sop.approval_status] || sop.approval_status}</div>
+      ${sop.head_comment ? `<p class="hint">💬 ملاحظة الهيد: ${esc(sop.head_comment)}</p>` : ""}
+      ${sop.director_comment ? `<p class="hint">💬 ملاحظة الدايركتور: ${esc(sop.director_comment)}</p>` : ""}
+      <div class="workflow-actions">${actionsHtml}</div>
+      ${(sop.approvals && sop.approvals.length) ? `
+        <table class="rev-table" style="margin-top:14px;">
+          <thead><tr><th>الخطوة</th><th>بواسطة</th><th>التاريخ</th><th>ملاحظة</th></tr></thead>
+          <tbody>
+            ${sop.approvals.map(a => `
+              <tr>
+                <td>${esc(stepLabels[a.step] || a.step)}</td>
+                <td>${esc(a.profiles?.full_name || "-")}</td>
+                <td>${fmtDate(a.created_at)}</td>
+                <td>${esc(a.comment || "-")}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      ` : ""}
+    `;
+
+    const submitBtn = card.querySelector("#submit-review-btn");
+    if (submitBtn) submitBtn.onclick = async () => {
+      try {
+        await DB.submitForReview(sop.id);
+        toast("اتبعت للهيد للمراجعة");
+        await App.navigate(`#/sop/${sop.id}/edit`, true);
+      } catch (e) { toast(e.message, true); }
+    };
+    const headApprove = card.querySelector("#head-approve-btn");
+    if (headApprove) headApprove.onclick = async () => {
+      try {
+        await DB.headDecide(sop.id, true, card.querySelector("#head-comment").value.trim());
+        toast("تمت الموافقة — اتبعت للدايركتور");
+        await App.navigate(`#/sop/${sop.id}/edit`, true);
+      } catch (e) { toast(e.message, true); }
+    };
+    const headReject = card.querySelector("#head-reject-btn");
+    if (headReject) headReject.onclick = async () => {
+      if (!confirm("تأكيد رفض الـ SOP؟")) return;
+      try {
+        await DB.headDecide(sop.id, false, card.querySelector("#head-comment").value.trim());
+        toast("تم الرفض");
+        await App.navigate(`#/sop/${sop.id}/edit`, true);
+      } catch (e) { toast(e.message, true); }
+    };
+    const dirApprove = card.querySelector("#director-approve-btn");
+    if (dirApprove) dirApprove.onclick = async () => {
+      try {
+        await DB.directorDecide(sop.id, true, card.querySelector("#director-comment").value.trim());
+        toast("تم الاعتماد النهائي — إصدار جديد اتعمل");
+        await App.navigate(`#/sop/${sop.id}/edit`, true);
+      } catch (e) { toast(e.message, true); }
+    };
+    const dirReject = card.querySelector("#director-reject-btn");
+    if (dirReject) dirReject.onclick = async () => {
+      if (!confirm("تأكيد رفض الـ SOP؟")) return;
+      try {
+        await DB.directorDecide(sop.id, false, card.querySelector("#director-comment").value.trim());
+        toast("تم الرفض");
+        await App.navigate(`#/sop/${sop.id}/edit`, true);
+      } catch (e) { toast(e.message, true); }
     };
     return card;
   },
@@ -397,7 +517,7 @@ const Editor = {
         <p class="hint">معدات وإجراءات السيفتي بتتاخد تلقائيًا من بيانات الـ SOP فوق — مش محتاج تكتبها هنا.</p>
       </div>
 
-      <div class="field"><label>3) شرح الخطوة</label><textarea class="sp-desc">${esc(step.description)}</textarea></div>
+      <div class="field"><label>3) متطلبات العمل (Work Requirements)</label><textarea class="sp-desc" placeholder="اكتب خطوات التنفيذ الفعلية بالتفصيل...">${esc(step.description)}</textarea></div>
 
       <div class="field">
         <label>4) صورة الخطوة</label>
@@ -415,7 +535,7 @@ const Editor = {
       </div>
 
       <div class="field-row">
-        <div class="field"><label>5) معيار القبول</label><textarea class="sp-accept" placeholder="مثال: لا يوجد خدوش، الفجوة 0.5-1mm">${esc(step.accept_criteria)}</textarea></div>
+        <div class="field"><label>5) الفحص القياسي (Standard Inspection)</label><textarea class="sp-accept" placeholder="مثال: 1. يتطابق مع نموذج المديل 2. لا يوجد خدوش أو كسور">${esc(step.accept_criteria)}</textarea></div>
         <div class="field"><label>6) طريقة الفحص</label><textarea class="sp-method" placeholder="مثال: فحص بصري بمصباح يدوي على بعد 400 مم">${esc(step.inspection_method)}</textarea></div>
       </div>
       <div class="field-row">
