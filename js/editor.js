@@ -4,31 +4,19 @@
 // the SOP and re-renders the editor section (simple, predictable).
 // =====================================================================
 const Editor = {
+  _saveFns: [],
+  registerSave(fn) {
+    this._saveFns.push(fn);
+  },
+
   async render(container, sopId) {
     container.innerHTML = `<div class="spinner"></div>`;
     const sop = await DB.getSopFull(sopId);
     await this.ensureSingleStage(sop);
+    this._saveFns = [];
     container.innerHTML = "";
     container.appendChild(this.buildHeaderForm(sop));
     container.appendChild(this.buildWorkflowBox(sop));
-
-    // زرار الحفظ الرئيسي — الوحيد اللي بيحدّث رقم الإصدار (Rev.)
-    const saveBar = document.createElement("div");
-    saveBar.className = "save-bar";
-    saveBar.innerHTML = `
-      <button class="btn btn-primary btn-lg" id="master-save-btn">💾 حفظ التعديلات (تحديث الإصدار)</button>
-      <span class="hint">كل التعديلات بتتحفظ فورًا أول ما تدوس "حفظ" في أي قسم، لكن رقم الإصدار (Rev.) مش بيزيد إلا لما تدوس الزرار ده.</span>
-    `;
-    saveBar.querySelector("#master-save-btn").onclick = async () => {
-      const btn = saveBar.querySelector("#master-save-btn");
-      btn.disabled = true;
-      try {
-        await this.bump(sop.id, "حفظ التعديلات");
-        toast("تم حفظ التعديلات وتحديث الإصدار");
-        await this.render(container, sopId);
-      } catch (e) { toast(e.message, true); btn.disabled = false; }
-    };
-    container.appendChild(saveBar);
 
     const stageHead = document.createElement("h2");
     stageHead.className = "section-title";
@@ -54,6 +42,34 @@ const Editor = {
     container.appendChild(this.buildToolsSection(sop));
     container.appendChild(this.buildReferencesSection(sop));
     container.appendChild(this.buildRevisionHistory(sop));
+
+    // زرار الحفظ الوحيد لكل الفورم — تحت خالص، بيحفظ كل حاجة كتبتها وبيبعت الـ SOP للمراجعة على طول
+    const saveBar = document.createElement("div");
+    saveBar.className = "save-bar";
+    saveBar.innerHTML = `
+      <button class="btn btn-primary btn-lg" id="master-save-btn">💾 حفظ وإرسال للمراجعة</button>
+      <span class="hint">الزرار ده بيحفظ كل حاجة كتبتها في الصفحة كلها (البيانات الأساسية، كل الخطوات، التفاصيل الإضافية)، وبيبعت الـ SOP للهيد للمراجعة، ويزوّد رقم الإصدار (Rev.).</span>
+    `;
+    saveBar.querySelector("#master-save-btn").onclick = async () => {
+      const btn = saveBar.querySelector("#master-save-btn");
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "جاري الحفظ...";
+      try {
+        for (const fn of this._saveFns) await fn();
+        await this.bump(sop.id, "حفظ وإرسال للمراجعة");
+        if (Auth.canEdit()) {
+          try { await DB.submitForReview(sop.id); } catch (_) { /* لو مش قابل لإعادة الإرسال دلوقتي، مش مشكلة */ }
+        }
+        toast("تم الحفظ والإرسال للمراجعة");
+        await this.render(container, sopId);
+      } catch (e) {
+        toast(e.message, true);
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    };
+    container.appendChild(saveBar);
   },
 
   // تُستدعى بعد أي حفظ ناجح — بتزود رقم الإصدار وتسجّله في سجل التعديلات
@@ -140,8 +156,6 @@ const Editor = {
         <div>✏️ <b>آخر تعديل بواسطة:</b> ${esc(sop.updated_by_name || "-")} — ${fmtDate(sop.updated_at)}</div>
         <p class="hint" style="margin:6px 0 0;">الاسم والتاريخ بياخدهم النظام تلقائيًا من حساب المستخدم المسجّل دخول — مفيش إدخال يدوي.</p>
       </div>
-
-      <button class="btn" id="save-header-btn">حفظ بيانات الخط والعنوان</button>
     `;
     wireAutoTranslate(card.querySelector("#f-title-ar"), card.querySelector("#f-title"));
     wireVideoBox(card);
@@ -155,7 +169,7 @@ const Editor = {
       try {
         const url = await DB.uploadSopVideo(sop.id, file);
         videoInput.value = url;
-        statusEl.textContent = "تم رفع الفيديو — متنساش تدوس \"حفظ\" تحت";
+        statusEl.textContent = "تم رفع الفيديو — هيتحفظ لما تدوس زرار الحفظ تحت الصفحة";
       } catch (e) {
         statusEl.textContent = "";
         toast(e.message, true);
@@ -163,7 +177,7 @@ const Editor = {
       ev.target.value = "";
     });
 
-    card.querySelector("#save-header-btn").onclick = async () => {
+    this.registerSave(async () => {
       const stationNoRaw = card.querySelector("#f-station-no").value.trim();
       const payload = {
         status: Auth.isAdmin() ? card.querySelector("#f-status").value : sop.status,
@@ -194,15 +208,13 @@ const Editor = {
           sop.code = newCode;
           card.querySelector("#f-code").value = newCode;
         }
-        toast("تم الحفظ");
       } catch (e) {
         if (String(e.message).includes("uq_sop_station_no") || e.code === "23505") {
-          toast("رقم المحطة ده مستخدم قبل كده في نفس الخط — اختار رقم تاني", true);
-        } else {
-          toast(e.message, true);
+          throw new Error("رقم المحطة ده مستخدم قبل كده في نفس الخط — اختار رقم تاني");
         }
+        throw e;
       }
-    };
+    });
     return card;
   },
 
@@ -320,18 +332,14 @@ const Editor = {
     card.innerHTML = `
       <h2>تفاصيل إضافية</h2>
       <div class="field"><label>التعامل مع الانحرافات — الإجراء العام عند حدوث عيب أو توقف خط (ممكن يتربط بنظام الـ Andon)</label><textarea id="f-deviation" placeholder="مثال: أوقف الخط فورًا، بلّغ المشرف، افتح تذكرة في نظام تتبع العيوب...">${esc(sop.deviation_handling)}</textarea></div>
-      <button class="btn" id="save-details-btn">حفظ التفاصيل الإضافية</button>
     `;
-    card.querySelector("#save-details-btn").onclick = async () => {
+    this.registerSave(async () => {
       const payload = {
         deviation_handling: card.querySelector("#f-deviation").value.trim(),
       };
-      try {
-        const updated = await DB.updateSop(sop.id, payload);
-        Object.assign(sop, updated);
-        toast("تم الحفظ");
-      } catch (e) { toast(e.message, true); }
-    };
+      const updated = await DB.updateSop(sop.id, payload);
+      Object.assign(sop, updated);
+    });
     return card;
   },
 
@@ -560,7 +568,6 @@ const Editor = {
       </details>
 
       <div class="editor-toolbar">
-        <button class="btn btn-sm save-step">حفظ الخطوة</button>
         <button class="btn btn-sm btn-ghost move-up" ${stIdx === 0 ? "disabled" : ""}>▲</button>
         <button class="btn btn-sm btn-ghost move-down" ${stIdx === stage.steps.length - 1 ? "disabled" : ""}>▼</button>
         <button class="btn btn-sm btn-danger del-step">حذف الخطوة</button>
@@ -625,27 +632,24 @@ const Editor = {
       ev.target.value = "";
     });
 
-    el.querySelector(".save-step").onclick = async () => {
-      try {
-        const payload = {
-          title_ar: el.querySelector(".sp-title-ar").value.trim(),
-          title: el.querySelector(".sp-title").value.trim(),
-          description: el.querySelector(".sp-desc").value.trim(),
-          requirements: reqs,
-          responsible_role: el.querySelector(".sp-role").value || null,
-          spec_value: el.querySelector(".sp-spec").value.trim() || null,
-          accept_criteria: el.querySelector(".sp-accept").value.trim() || null,
-          inspection_method: el.querySelector(".sp-method").value.trim() || null,
-          inspection_repeat: el.querySelector(".sp-repeat").value.trim() || null,
-          reject_action: el.querySelector(".sp-reject-action").value.trim() || null,
-          defect_code: el.querySelector(".sp-defect").value.trim() || null,
-          is_critical: el.querySelector(".sp-critical").checked,
-        };
-        await DB.updateStep(step.id, payload);
-        Object.assign(step, payload);
-        toast("تم حفظ الخطوة");
-      } catch (e) { toast(e.message, true); }
-    };
+    this.registerSave(async () => {
+      const payload = {
+        title_ar: el.querySelector(".sp-title-ar").value.trim(),
+        title: el.querySelector(".sp-title").value.trim(),
+        description: el.querySelector(".sp-desc").value.trim(),
+        requirements: reqs,
+        responsible_role: el.querySelector(".sp-role").value || null,
+        spec_value: el.querySelector(".sp-spec").value.trim() || null,
+        accept_criteria: el.querySelector(".sp-accept").value.trim() || null,
+        inspection_method: el.querySelector(".sp-method").value.trim() || null,
+        inspection_repeat: el.querySelector(".sp-repeat").value.trim() || null,
+        reject_action: el.querySelector(".sp-reject-action").value.trim() || null,
+        defect_code: el.querySelector(".sp-defect").value.trim() || null,
+        is_critical: el.querySelector(".sp-critical").checked,
+      };
+      await DB.updateStep(step.id, payload);
+      Object.assign(step, payload);
+    });
     el.querySelector(".del-step").onclick = async () => {
       if (!confirm("حذف الخطوة؟")) return;
       await DB.deleteStep(step.id);
