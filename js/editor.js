@@ -637,14 +637,18 @@ const Editor = {
     const chipInput = el.querySelector(".chip-input");
     let reqs = [...(step.requirements || [])];
     const reqInput = chipInput.querySelector(".req-input");
-    reqInput.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter" && reqInput.value.trim()) {
-        ev.preventDefault();
+    const commitReqInput = () => {
+      if (reqInput.value.trim()) {
         reqs.push(reqInput.value.trim());
         reqInput.value = "";
         refreshChips();
       }
+    };
+    reqInput.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); commitReqInput(); }
     });
+    // لو المستخدم كتب ومشى (من غير Enter)، حوّل النص لشريحة واضحة برضه عند الخروج من الخانة
+    reqInput.addEventListener("blur", commitReqInput);
     function refreshChips() {
       chipInput.querySelectorAll(".chip").forEach(c => c.remove());
       reqs.forEach((r, i) => {
@@ -690,6 +694,11 @@ const Editor = {
     });
 
     this.registerSave(async () => {
+      // لو فيه نص متكتوب في خانة "أضف أداة أو آلة" ولسه ما ضُغطش عليه Enter، ضيفه تلقائيًا
+      // قبل الحفظ عشان محدش يفقد اللي كتبه نسيان
+      const leftover = reqInput.value.trim();
+      if (leftover) { reqs.push(leftover); reqInput.value = ""; }
+
       const payload = {
         title_ar: el.querySelector(".sp-title-ar").value.trim(),
         title: el.querySelector(".sp-title").value.trim(),
