@@ -217,7 +217,7 @@ const PdfExport = {
           <th>حالة الاعتماد<br/><span class="en">Approval Status</span></th>
         </tr>
         <tr>
-          <td>${sop.video_url ? `<img class="qr-target xsheet-info-qr" data-video="${esc(sop.video_url)}" />` : esc(roles || "-")}</td>
+          <td>${sop.video_url ? `<img class="qr-target xsheet-info-qr" data-video="${esc(sopViewUrl(sop))}" />` : esc(roles || "-")}</td>
           <td>${esc(sop.inspection_environment || "-")}</td>
           <td>${esc(sop.inspection_frequency || "-")}</td>
           <td>${esc(toolsTxt || "-")}</td>
@@ -376,8 +376,8 @@ const PdfExport = {
       })()}
       ${sop.video_url ? `
         <div class="psheet-video">
-          <img class="qr-target" data-video="${esc(sop.video_url)}" />
-          <span>امسح الكود لمشاهدة فيديو الفحص / التجميع الخاص بالـ SOP<br/><span style="color:#888;">${esc(sop.video_url)}</span></span>
+          <img class="qr-target" data-video="${esc(sopViewUrl(sop))}" />
+          <span>امسح الكود لفتح صفحة الـ SOP ومشاهدة الفيديو<br/><span style="color:#888;">${esc(sopViewUrl(sop))}</span></span>
         </div>
       ` : ""}
       ${sop.pre_work_procedure ? `
@@ -529,6 +529,12 @@ function roleLabelPdf(role) {
   return {
     operator: "عامل تشغيل", supervisor: "مشرف", qc: "مراقبة جودة", maintenance: "صيانة", other: "أخرى",
   }[role] || role;
+}
+
+// رابط صفحة عرض الـ SOP على النظام — ده اللي بيتحط في QR (بدل رابط الفيديو المباشر)
+// عشان أي حد يمسحه يدخل على الصفحة نفسها (عرض بدون تعديل، مع مشغّل الفيديو جواها)
+function sopViewUrl(sop) {
+  return `${window.location.origin}${window.location.pathname}#/sop/${sop.id}`;
 }
 
 function truncateText(str, max) {
