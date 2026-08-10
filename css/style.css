@@ -69,6 +69,11 @@ button{font-family:inherit; cursor:pointer;}
   letter-spacing:.02em;
   display:flex; align-items:center; gap:10px;
 }
+.lang-toggle-btn{
+  background:transparent; border:1px solid var(--amber); color:var(--amber);
+  border-radius:14px; padding:4px 12px; font-size:12px; font-weight:700; cursor:pointer;
+}
+.lang-toggle-btn:hover{background:var(--amber); color:var(--blueprint-900);}
 .brand .tag{
   font-family:var(--font-mono);
   font-size:10px;
