@@ -205,6 +205,9 @@ const App = {
       ${Auth.isAdmin() ? `<div id="logo-settings"></div>` : ""}
       <div class="filters">
         <input id="search-box" placeholder="ابحث بالاسم أو الكود..."/>
+        <select id="factory-filter">
+          <option value="">كل المصانع</option>
+        </select>
         <select id="status-filter">
           <option value="">كل الحالات</option>
           <option value="active">معتمدة</option>
@@ -222,13 +225,24 @@ const App = {
       this.renderLogoSettings(logoBox);
     }
 
+    try {
+      const factories = await DB.listDistinctFactories();
+      const factorySelect = main.querySelector("#factory-filter");
+      factories.forEach(f => {
+        const opt = document.createElement("option");
+        opt.value = f; opt.textContent = f;
+        factorySelect.appendChild(opt);
+      });
+    } catch (_) { /* غير حرِج */ }
+
     const load = async () => {
       const search = main.querySelector("#search-box").value.trim();
       const status = main.querySelector("#status-filter").value;
+      const factory = main.querySelector("#factory-filter").value;
       const grid = main.querySelector("#sop-grid");
       grid.innerHTML = `<div class="spinner"></div>`;
       try {
-        const sops = await DB.listSops({ search, status });
+        const sops = await DB.listSops({ search, status, factory });
         grid.innerHTML = "";
         if (!sops.length) {
           grid.innerHTML = `<div class="empty-state">لا توجد SOPs بعد. ${Auth.canEdit() ? "ابدأ بإضافة واحدة." : ""}</div>`;
@@ -239,50 +253,76 @@ const App = {
     };
     main.querySelector("#search-box").addEventListener("input", debounce(load, 300));
     main.querySelector("#status-filter").addEventListener("change", load);
+    main.querySelector("#factory-filter").addEventListener("change", load);
     await load();
   },
 
-  // لوحة فلو الخط — كل الـ SOPs (كل واحد = محطة) مرتبة ورا بعض حسب رقم المحطة
+  // لوحة فلو الخط — فلترة على مستويين: المصنع أولاً، وبعدين الخط جوّاه
   async renderLineFlowDashboard(box) {
     box.innerHTML = `<div class="form-card"><div class="spinner"></div></div>`;
-    let lines = [];
+    let factories = [];
     try {
-      lines = await DB.listDistinctLines();
+      factories = await DB.listDistinctFactories();
     } catch (e) {
       box.innerHTML = "";
       return;
     }
-    if (!lines.length) { box.innerHTML = ""; return; }
 
     box.innerHTML = `
       <div class="form-card">
         <h2 style="margin-top:0;">فلو الخط — ترتيب الـ SOPs (المحطات) ورا بعض</h2>
-        <p class="hint">اضغط أي زر "+" حول أي محطة: يمين/يسار يضيف محطة قبلها أو بعدها في التسلسل، وأعلى/أسفل يضيف محطة تعمل بالتوازي معها في نفس النقطة.</p>
-        <div class="field" style="max-width:280px;">
-          <label>اختر الخط</label>
-          <select id="line-select">
-            ${lines.map(l => `<option value="${attr(l)}">${esc(l)}</option>`).join("")}
-          </select>
+        <p class="hint">اختر المصنع، وبعدين الخط جوّاه. اضغط أي زر "+" حول أي محطة: يمين/يسار يضيف محطة قبلها أو بعدها في التسلسل، وأعلى/أسفل يضيف محطة تعمل بالتوازي معها في نفس النقطة.</p>
+        <div class="field-row">
+          <div class="field" style="max-width:260px;">
+            <label>المصنع</label>
+            <select id="factory-select">
+              ${factories.length ? "" : `<option value="">— لا توجد مصانع مسجّلة —</option>`}
+              ${factories.map(f => `<option value="${attr(f)}">${esc(f)}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field" style="max-width:260px;">
+            <label>الخط</label>
+            <select id="line-select"></select>
+          </div>
         </div>
         <div id="line-flow-body"></div>
       </div>
     `;
 
-    const select = box.querySelector("#line-select");
+    const factorySelect = box.querySelector("#factory-select");
+    const lineSelect = box.querySelector("#line-select");
     const flowBody = box.querySelector("#line-flow-body");
 
     const loadLine = async () => {
+      if (!lineSelect.value) { flowBody.innerHTML = `<div class="hint">اختر خطًا لعرض الفلو بتاعه.</div>`; return; }
       flowBody.innerHTML = `<div class="spinner"></div>`;
       try {
-        const sops = await DB.listSops({ station: select.value });
+        const sops = await DB.listSops({ station: lineSelect.value });
         flowBody.innerHTML = "";
-        flowBody.appendChild(this.buildSopFlowGrid(sops, select.value, loadLine));
+        flowBody.appendChild(this.buildSopFlowGrid(sops, lineSelect.value, loadLine));
       } catch (e) {
         flowBody.innerHTML = `<div class="hint">${esc(e.message)}</div>`;
       }
     };
-    select.addEventListener("change", loadLine);
-    await loadLine();
+
+    const loadLinesForFactory = async () => {
+      lineSelect.innerHTML = `<option value="">جاري التحميل...</option>`;
+      try {
+        const lines = await DB.listDistinctLines(factorySelect.value);
+        lineSelect.innerHTML = lines.length
+          ? lines.map(l => `<option value="${attr(l)}">${esc(l)}</option>`).join("")
+          : `<option value="">— لا توجد خطوط —</option>`;
+      } catch (_) {
+        lineSelect.innerHTML = `<option value="">— تعذّر التحميل —</option>`;
+      }
+      await loadLine();
+    };
+
+    factorySelect.addEventListener("change", loadLinesForFactory);
+    lineSelect.addEventListener("change", loadLine);
+
+    if (factories.length) await loadLinesForFactory();
+    else flowBody.innerHTML = `<div class="hint">أضف "المصنع" لأي SOP الأول عشان فلو الخط يظهر هنا.</div>`;
   },
 
   // بناء شبكة فلو الـ SOPs: أعمدة = رقم المحطة (تسلسل)، وكل عمود ممكن فيه أكتر من مسار موازي (flow_lane)
@@ -409,6 +449,7 @@ const App = {
       <h3>${esc(sop.title_ar || sop.title)}</h3>
       <div class="meta">
         <span class="badge ${sop.status}">${statusLabel(sop.status)}</span>
+        ${sop.factory ? `<span>🏭 ${esc(sop.factory)}</span>` : ""}
         ${sop.station ? `<span>${esc(sop.station)}${sop.station_no ? ` #${sop.station_no}` : ""}</span>` : ""}
         <span>v${sop.version || 1}</span>
       </div>
