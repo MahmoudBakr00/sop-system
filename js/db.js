@@ -33,18 +33,27 @@ const DB = {
   },
 
   // ---------- SOPs ----------
-  async listSops({ search = "", status = "", station = "" } = {}) {
+  async listSops({ search = "", status = "", station = "", factory = "" } = {}) {
     let q = supabaseClient.from("sops").select("*").order("updated_at", { ascending: false });
     if (status) q = q.eq("status", status);
     if (station) q = q.eq("station", station);
+    if (factory) q = q.eq("factory", factory);
     if (search) q = q.or(`title.ilike.%${search}%,title_ar.ilike.%${search}%,code.ilike.%${search}%`);
     const { data, error } = await q;
     if (error) throw error;
     return data;
   },
 
-  async listDistinctLines() {
-    const { data, error } = await supabaseClient.from("sops").select("station").not("station", "is", null);
+  async listDistinctFactories() {
+    const { data, error } = await supabaseClient.from("sops").select("factory").not("factory", "is", null);
+    if (error) throw error;
+    return [...new Set(data.map(r => r.factory).filter(Boolean))].sort();
+  },
+
+  async listDistinctLines(factory = "") {
+    let q = supabaseClient.from("sops").select("station").not("station", "is", null);
+    if (factory) q = q.eq("factory", factory);
+    const { data, error } = await q;
     if (error) throw error;
     return [...new Set(data.map(r => r.station).filter(Boolean))].sort();
   },
