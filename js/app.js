@@ -19,20 +19,26 @@ const App = {
   async render() {
     const hash = location.hash || "#/";
     this.root.innerHTML = "";
-    this.root.appendChild(this.topbar());
+    const viewMatch = hash.match(/^#\/sop\/([^/]+)$/);
 
     const main = document.createElement("main");
-    this.root.appendChild(main);
 
     if (!Auth.isLoggedIn()) {
+      this.root.appendChild(this.topbar());
+      this.root.appendChild(main);
+      // عرض عام للـ SOP بدون تسجيل دخول — عشان لينك QR يفتح مباشرة لأي حد يمسحه
+      if (viewMatch) return this.renderViewer(main, viewMatch[1]);
       return this.renderLogin(main);
     }
 
+    this.root.appendChild(this.topbar());
+    this.root.appendChild(main);
+
     if (hash === "#/" || hash === "") return this.renderList(main);
     if (hash === "#/new") return this.renderNew(main);
+    if (hash === "#/users") return this.renderUsers(main);
     const editMatch = hash.match(/^#\/sop\/([^/]+)\/edit$/);
     if (editMatch) return this.renderEditor(main, editMatch[1]);
-    const viewMatch = hash.match(/^#\/sop\/([^/]+)$/);
     if (viewMatch) return this.renderViewer(main, viewMatch[1]);
 
     main.innerHTML = `<div class="empty-state">الصفحة غير موجودة</div>`;
@@ -54,6 +60,11 @@ const App = {
         const add = document.createElement("a");
         add.href = "#/new"; add.textContent = "+ SOP جديد";
         nav.appendChild(add);
+      }
+      if (Auth.isAdmin()) {
+        const users = document.createElement("a");
+        users.href = "#/users"; users.textContent = "👥 المستخدمون";
+        nav.appendChild(users);
       }
       const who = document.createElement("span");
       who.className = "who";
@@ -414,6 +425,106 @@ const App = {
       const sop = await DB.createSop({ title: "SOP جديد", title_ar: "SOP جديد", status: "draft" });
       this.navigate(`#/sop/${sop.id}/edit`, true);
     } catch (e) { main.innerHTML = `<div class="empty-state">${esc(e.message)}</div>`; }
+  },
+
+  // ---------------- إدارة المستخدمين (admin فقط) ----------------
+  async renderUsers(main) {
+    if (!Auth.isAdmin()) { main.innerHTML = `<div class="empty-state">هذه الصفحة للأدمن فقط</div>`; return; }
+
+    main.innerHTML = `
+      <div class="page-head">
+        <div><h1>إدارة المستخدمين</h1><p>أنشئ حسابات جديدة (إيميل وباسورد) وعدّل صلاحيات المستخدمين الحاليين</p></div>
+      </div>
+
+      <div class="form-card">
+        <h2 style="margin-top:0;">+ إنشاء مستخدم جديد</h2>
+        <p class="hint">أنشئ الحساب هنا، وابعت الإيميل والباسورد للمستخدم يدويًا عشان يسجّل دخوله بيهم.</p>
+        <div class="field-row">
+          <div class="field"><label>الإيميل</label><input id="u-email" type="email" placeholder="name@example.com"/></div>
+          <div class="field"><label>الباسورد</label><input id="u-password" type="text" placeholder="6 أحرف على الأقل"/></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>الاسم الكامل</label><input id="u-name" placeholder="مثال: محمد أحمد"/></div>
+          <div class="field"><label>الصلاحية</label>
+            <select id="u-role">
+              <option value="viewer">مشاهد</option>
+              <option value="engineer">مهندس</option>
+              <option value="head">هيد</option>
+              <option value="director">دايركتور</option>
+              <option value="admin">أدمن</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="u-create-btn">إنشاء الحساب</button>
+      </div>
+
+      <div class="form-card">
+        <h2 style="margin-top:0;">المستخدمون الحاليون</h2>
+        <div id="users-rows"><div class="spinner"></div></div>
+      </div>
+    `;
+
+    main.querySelector("#u-create-btn").onclick = async (ev) => {
+      const btn = ev.currentTarget;
+      const email = main.querySelector("#u-email").value.trim();
+      const password = main.querySelector("#u-password").value;
+      const full_name = main.querySelector("#u-name").value.trim() || null;
+      const role = main.querySelector("#u-role").value;
+      if (!email || password.length < 6) {
+        toast("الإيميل مطلوب، والباسورد لازم يكون 6 أحرف على الأقل", true);
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = "جاري الإنشاء...";
+      try {
+        await DB.createUserAsAdmin({ email, password, full_name, role });
+        toast("تم إنشاء الحساب بنجاح");
+        main.querySelector("#u-email").value = "";
+        main.querySelector("#u-password").value = "";
+        main.querySelector("#u-name").value = "";
+        await loadUsers();
+      } catch (e) {
+        toast(e.message, true);
+      }
+      btn.disabled = false;
+      btn.textContent = "إنشاء الحساب";
+    };
+
+    const rowsBox = main.querySelector("#users-rows");
+    const roleOptions = [
+      ["viewer", "مشاهد"], ["engineer", "مهندس"], ["head", "هيد"],
+      ["director", "دايركتور"], ["admin", "أدمن"],
+    ];
+    const loadUsers = async () => {
+      rowsBox.innerHTML = `<div class="spinner"></div>`;
+      try {
+        const users = await DB.listAllProfiles();
+        rowsBox.innerHTML = users.map(u => `
+          <div class="list-row" data-id="${u.id}">
+            <input class="u-name-edit" value="${attr(u.full_name || "")}" placeholder="بدون اسم" style="flex:1; min-width:130px; padding:6px 8px; border:1px solid var(--blueprint-line); border-radius:3px;">
+            <select class="u-role-edit" style="width:120px;">
+              ${roleOptions.map(([v, l]) => `<option value="${v}" ${u.role === v ? "selected" : ""}>${l}</option>`).join("")}
+            </select>
+            <button class="btn btn-sm u-save">حفظ</button>
+          </div>
+        `).join("") || `<div class="hint">لا يوجد مستخدمون</div>`;
+        rowsBox.querySelectorAll(".u-save").forEach(btn => {
+          btn.onclick = async () => {
+            const row = btn.closest(".list-row");
+            const id = row.dataset.id;
+            const full_name = row.querySelector(".u-name-edit").value.trim() || null;
+            const role = row.querySelector(".u-role-edit").value;
+            try {
+              await DB.updateProfile(id, { full_name, role });
+              toast("تم الحفظ");
+            } catch (e) { toast(e.message, true); }
+          };
+        });
+      } catch (e) {
+        rowsBox.innerHTML = `<div class="hint">${esc(e.message)}</div>`;
+      }
+    };
+    await loadUsers();
   },
 
   // ---------------- Editor ----------------
