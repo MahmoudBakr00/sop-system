@@ -9,6 +9,7 @@ const App = {
     await Auth.init();
     window.addEventListener("hashchange", () => this.render());
     await this.render();
+    I18N.watch(this.root);
   },
 
   navigate(hash, force = false) {
@@ -52,6 +53,16 @@ const App = {
       <nav id="topbar-nav"></nav>
     `;
     const nav = bar.querySelector("#topbar-nav");
+
+    const langBtn = document.createElement("button");
+    langBtn.textContent = I18N.lang === "ar" ? "🌐 EN" : "🌐 AR";
+    langBtn.className = "lang-toggle-btn";
+    langBtn.onclick = () => {
+      I18N.toggle();
+      langBtn.textContent = I18N.lang === "ar" ? "🌐 EN" : "🌐 AR";
+    };
+    nav.appendChild(langBtn);
+
     if (Auth.isLoggedIn()) {
       const home = document.createElement("a");
       home.href = "#/"; home.textContent = "كل الـ SOPs";
@@ -736,7 +747,7 @@ const App = {
             ${(step.requirements && step.requirements.length) ? `
               <div class="hint"><b>المعدات والآلات المستخدمة:</b></div>
               <ul class="req-list">${step.requirements.map(r => `<li>${esc(r)}</li>`).join("")}</ul>
-            ` : (sop.tools && sop.tools.length) ? `
+            ` : (step.use_general_equipment && sop.tools && sop.tools.length) ? `
               <div class="hint"><b>المعدات والآلات المستخدمة (عام):</b></div>
               <ul class="req-list">${sop.tools.map(t => `<li>${esc(t.name)}${t.spec ? ` — ${esc(t.spec)}` : ""}</li>`).join("")}</ul>
             ` : ""}
