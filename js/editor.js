@@ -576,8 +576,8 @@ const Editor = {
           <input class="req-input" placeholder="أضف أداة أو آلة..." style="border:none; flex:1; min-width:120px; padding:4px;"/>
         </div>
         <label class="sp-use-general-label" style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px;">
-          <input type="checkbox" class="sp-use-general" ${step.use_general_equipment ? "checked" : ""}/>
-          لو الحقل فوق فاضي، استخدم قائمة المعدات العامة (من بيانات الـ SOP) لهذه الخطوة — لو مش متأشّر، هتفضل فاضية.
+          <input type="checkbox" class="sp-use-general" ${step.use_general_equipment !== false ? "checked" : ""}/>
+          لو الحقل فوق فاضي، استخدم قائمة المعدات العامة (من بيانات الـ SOP) لهذه الخطوة — مفعّل بالافتراضي؛ شيل التحديد لو عايز الخطوة دي تفضل من غير معدات خالص.
         </label>
         <p class="hint">تُؤخذ معدات وإجراءات السلامة تلقائيًا من بيانات الـ SOP أعلاه — لا حاجة لكتابتها هنا.</p>
       </div>
