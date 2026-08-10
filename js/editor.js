@@ -549,11 +549,15 @@ const Editor = {
       </div>
 
       <div class="field">
-        <label>2) المعدات والآلات المستخدمة — اكتب واضغط Enter لإضافة كل عنصر</label>
+        <label>2) المعدات والآلات المستخدمة الخاصة بهذه الخطوة — اكتب واضغط Enter لإضافة كل عنصر</label>
         <div class="chip-input" data-reqs='${JSON.stringify(step.requirements || [])}'>
           ${(step.requirements || []).map((r, i) => `<span class="chip" data-i="${i}">${esc(r)}<button type="button">×</button></span>`).join("")}
           <input class="req-input" placeholder="أضف أداة أو آلة..." style="border:none; flex:1; min-width:120px; padding:4px;"/>
         </div>
+        <label class="sp-use-general-label" style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px;">
+          <input type="checkbox" class="sp-use-general" ${step.use_general_equipment ? "checked" : ""}/>
+          لو الحقل فوق فاضي، استخدم قائمة المعدات العامة (من بيانات الـ SOP) لهذه الخطوة — لو مش متأشّر، هتفضل فاضية.
+        </label>
         <p class="hint">تُؤخذ معدات وإجراءات السلامة تلقائيًا من بيانات الـ SOP أعلاه — لا حاجة لكتابتها هنا.</p>
       </div>
 
@@ -670,6 +674,7 @@ const Editor = {
         title: el.querySelector(".sp-title").value.trim(),
         description: el.querySelector(".sp-desc").value.trim(),
         requirements: reqs,
+        use_general_equipment: el.querySelector(".sp-use-general").checked,
         responsible_role: el.querySelector(".sp-role").value || null,
         spec_value: el.querySelector(".sp-spec").value.trim() || null,
         accept_criteria: el.querySelector(".sp-accept").value.trim() || null,
