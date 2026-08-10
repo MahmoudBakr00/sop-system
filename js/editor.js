@@ -8,6 +8,12 @@ const Editor = {
   registerSave(fn) {
     this._saveFns.push(fn);
   },
+  // بيحفظ كل الحقول المسجّلة (من كل الأقسام) من غير ما يبعت للمراجعة أو يزوّد الإصدار —
+  // بيتنادى قبل أي عملية بتعمل ريفريش كامل للصفحة (زي إضافة/حذف/تحريك خطوة) عشان محدش يفقد
+  // حاجة كان بيكتبها في البيانات الأساسية أو أي قسم تاني لسه ما اتحفظش.
+  async saveAllFields() {
+    for (const fn of this._saveFns) await fn();
+  },
 
   async render(container, sopId) {
     container.innerHTML = `<div class="spinner"></div>`;
@@ -31,9 +37,18 @@ const Editor = {
     addStepBtn.className = "btn btn-primary";
     addStepBtn.textContent = "+ إضافة خطوة جديدة";
     addStepBtn.onclick = async () => {
-      const stage = sop.stages[0];
-      await DB.createStep(stage.id, { title: "خطوة جديدة", title_ar: "خطوة جديدة", requirements: [] }, stage.steps.length);
-      await this.render(container, sopId);
+      const btn = addStepBtn;
+      const original = btn.textContent;
+      btn.disabled = true; btn.textContent = "جاري الحفظ...";
+      try {
+        await this.saveAllFields(); // احفظ كل حاجة كتبتها فوق الأول عشان متضيعش
+        const stage = sop.stages[0];
+        await DB.createStep(stage.id, { title: "خطوة جديدة", title_ar: "خطوة جديدة", requirements: [] }, stage.steps.length);
+        await this.render(container, sopId);
+      } catch (e) {
+        toast(e.message, true);
+        btn.disabled = false; btn.textContent = original;
+      }
     };
     container.appendChild(addStepBtn);
 
@@ -58,7 +73,7 @@ const Editor = {
       btn.disabled = true;
       btn.textContent = "جاري الحفظ...";
       try {
-        for (const fn of this._saveFns) await fn();
+        await this.saveAllFields();
         await this.bump(sop.id, "حفظ وإرسال للمراجعة");
         if (Auth.canEdit()) {
           try { await DB.submitForReview(sop.id); } catch (_) { /* لو مش قابل لإعادة الإرسال دلوقتي، مش مشكلة */ }
@@ -287,6 +302,7 @@ const Editor = {
     const submitBtn = card.querySelector("#submit-review-btn");
     if (submitBtn) submitBtn.onclick = async () => {
       try {
+        await this.saveAllFields();
         await DB.submitForReview(sop.id);
         toast("أُرسل الـ SOP إلى الهيد للمراجعة");
         await App.navigate(`#/sop/${sop.id}/edit`, true);
@@ -295,6 +311,7 @@ const Editor = {
     const headApprove = card.querySelector("#head-approve-btn");
     if (headApprove) headApprove.onclick = async () => {
       try {
+        await this.saveAllFields();
         await DB.headDecide(sop.id, true, card.querySelector("#head-comment").value.trim());
         toast("تمت الموافقة — أُرسل الـ SOP إلى الدايركتور");
         await App.navigate(`#/sop/${sop.id}/edit`, true);
@@ -304,6 +321,7 @@ const Editor = {
     if (headReject) headReject.onclick = async () => {
       if (!confirm("تأكيد رفض الـ SOP؟")) return;
       try {
+        await this.saveAllFields();
         await DB.headDecide(sop.id, false, card.querySelector("#head-comment").value.trim());
         toast("تم الرفض");
         await App.navigate(`#/sop/${sop.id}/edit`, true);
@@ -312,6 +330,7 @@ const Editor = {
     const dirApprove = card.querySelector("#director-approve-btn");
     if (dirApprove) dirApprove.onclick = async () => {
       try {
+        await this.saveAllFields();
         await DB.directorDecide(sop.id, true, card.querySelector("#director-comment").value.trim());
         toast("تم الاعتماد النهائي — تم إصدار نسخة جديدة");
         await App.navigate(`#/sop/${sop.id}/edit`, true);
@@ -321,6 +340,7 @@ const Editor = {
     if (dirReject) dirReject.onclick = async () => {
       if (!confirm("تأكيد رفض الـ SOP؟")) return;
       try {
+        await this.saveAllFields();
         await DB.directorDecide(sop.id, false, card.querySelector("#director-comment").value.trim());
         toast("تم الرفض");
         await App.navigate(`#/sop/${sop.id}/edit`, true);
@@ -693,16 +713,19 @@ const Editor = {
     });
     el.querySelector(".del-step").onclick = async () => {
       if (!confirm("حذف الخطوة؟")) return;
+      await Editor.saveAllFields();
       await DB.deleteStep(step.id);
       await App.navigate(`#/sop/${sop.id}/edit`, true);
     };
     el.querySelector(".move-up").onclick = async () => {
+      await Editor.saveAllFields();
       const ids = stage.steps.map(s => s.id);
       [ids[stIdx - 1], ids[stIdx]] = [ids[stIdx], ids[stIdx - 1]];
       await DB.reorderSteps(ids);
       await App.navigate(`#/sop/${sop.id}/edit`, true);
     };
     el.querySelector(".move-down").onclick = async () => {
+      await Editor.saveAllFields();
       const ids = stage.steps.map(s => s.id);
       [ids[stIdx + 1], ids[stIdx]] = [ids[stIdx], ids[stIdx + 1]];
       await DB.reorderSteps(ids);
