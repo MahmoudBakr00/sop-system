@@ -64,8 +64,8 @@ const Editor = {
     const saveBar = document.createElement("div");
     saveBar.className = "save-bar";
     saveBar.innerHTML = `
-      <button class="btn btn-primary btn-lg" id="master-save-btn">💾 حفظ وإرسال للمراجعة</button>
-      <span class="hint">يحفظ هذا الزر جميع البيانات المُدخلة في الصفحة (البيانات الأساسية، كل الخطوات، التفاصيل الإضافية)، ويُرسل الـ SOP إلى الهيد للمراجعة، ويزيد رقم الإصدار (Rev.).</span>
+      <button class="btn btn-primary btn-lg" id="master-save-btn">💾 حفظ التعديلات</button>
+      <span class="hint">يحفظ هذا الزر جميع البيانات المُدخلة في الصفحة (البيانات الأساسية، كل الخطوات، التفاصيل الإضافية) ويزيد رقم الإصدار (Rev.) — <b>من غير ما يبعت الـ SOP للمراجعة</b>. لو خرجت بعد الحفظ، الـ SOP هيفضل "مسودة". لما تكون جاهز فعلًا، دوس "📤 إرسال للمراجعة" في قسم "سايكل الموافقات" فوق.</span>
     `;
     saveBar.querySelector("#master-save-btn").onclick = async () => {
       const btn = saveBar.querySelector("#master-save-btn");
@@ -74,11 +74,8 @@ const Editor = {
       btn.textContent = "جاري الحفظ...";
       try {
         await this.saveAllFields();
-        await this.bump(sop.id, "حفظ وإرسال للمراجعة");
-        if (Auth.canEdit()) {
-          try { await DB.submitForReview(sop.id); } catch (_) { /* لو مش قابل لإعادة الإرسال دلوقتي، مش مشكلة */ }
-        }
-        toast("تم الحفظ والإرسال للمراجعة");
+        await this.bump(sop.id, "حفظ التعديلات");
+        toast("تم حفظ التعديلات (لسه مسودة — لسه ما اتبعتش للمراجعة)");
         await this.render(container, sopId);
       } catch (e) {
         toast(e.message, true);
