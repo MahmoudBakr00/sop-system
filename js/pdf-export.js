@@ -283,7 +283,7 @@ const PdfExport = {
           <td>${idx}</td>
           <td><b>${esc(step.title_ar || step.title)}</b></td>
           <td>${esc(step.inspection_method || "-")}</td>
-          <td>${(step.requirements && step.requirements.length) ? step.requirements.map(esc).join("<br/>") : (esc(toolsTxt) || "-")}</td>
+          <td>${(step.requirements && step.requirements.length) ? step.requirements.map(esc).join("<br/>") : (step.use_general_equipment && toolsTxt) ? esc(toolsTxt) : "-"}</td>
           <td>${esc(step.accept_criteria || "-")}</td>
           <td>${esc(step.description || "-")}</td>
           <td class="xsheet-img-cell">
@@ -401,7 +401,7 @@ const PdfExport = {
             <div class="pnum">${stepNo}</div>
             <div style="flex:1;">
               <h3>${esc(step.title_ar || step.title)} ${step.is_critical ? '<span class="psheet-critical">حرجة</span>' : ""}</h3>
-              ${(step.requirements && step.requirements.length) || toolsTxt ? `
+              ${(step.requirements && step.requirements.length) || (step.use_general_equipment && toolsTxt) ? `
                 <div class="psheet-req"><b>المعدات والآلات المستخدمة:</b> ${
                   (step.requirements && step.requirements.length) ? step.requirements.map(r => esc(r)).join(" · ") : esc(toolsTxt)
                 }</div>
