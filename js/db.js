@@ -2,6 +2,36 @@
 // Data access layer — every Supabase query lives here so views stay thin.
 // =====================================================================
 const DB = {
+  // ---------- إدارة المستخدمين (admin فقط) ----------
+  async listAllProfiles() {
+    const { data, error } = await supabaseClient
+      .from("profiles").select("id, full_name, role, created_at")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+  async updateProfile(id, payload) {
+    const { data, error } = await supabaseClient.from("profiles").update(payload).eq("id", id).select().single();
+    if (error) throw error;
+    return data;
+  },
+  async createUserAsAdmin({ email, password, full_name, role }) {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) throw new Error("لازم تكون مسجّل دخول");
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-create-user`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ email, password, full_name, role }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "فشل إنشاء المستخدم");
+    return data;
+  },
+
   // ---------- SOPs ----------
   async listSops({ search = "", status = "", station = "" } = {}) {
     let q = supabaseClient.from("sops").select("*").order("updated_at", { ascending: false });
