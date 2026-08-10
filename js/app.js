@@ -543,11 +543,68 @@ const App = {
   },
 
   // ---------------- Viewer ----------------
-  async renderViewer(main, sopId) {
+  // بيترجم نسخة كاملة من بيانات الـ SOP للإنجليزي (بيستخدم نفس خدمة الترجمة المجانية المستخدمة في التعديل)
+  async translateSopClone(sop) {
+    const clone = JSON.parse(JSON.stringify(sop));
+    const jobs = [];
+    const tr = (obj, key) => {
+      const val = obj[key];
+      if (val && typeof val === "string" && /[\u0600-\u06FF]/.test(val)) {
+        jobs.push((async () => {
+          try { obj[key] = (await autoTranslate(val)) || val; } catch (_) { /* سيب النص الأصلي لو الترجمة فشلت */ }
+        })());
+      }
+    };
+
+    // العنوان: استخدم الإنجليزي المخزّن لو موجود، وإلا تُرجم النسخة العربية
+    clone.title_ar = (clone.title && clone.title.trim()) ? clone.title : clone.title_ar;
+    tr(clone, "title_ar");
+    ["description", "safety_notes", "deviation_handling", "pre_work_procedure", "post_work_procedure",
+      "station", "notes", "inspection_frequency", "inspection_environment"].forEach(k => tr(clone, k));
+
+    (clone.stages || []).forEach(stage => {
+      stage.title_ar = (stage.title && stage.title.trim()) ? stage.title : stage.title_ar;
+      tr(stage, "title_ar");
+      (stage.steps || []).forEach(step => {
+        step.title_ar = (step.title && step.title.trim()) ? step.title : step.title_ar;
+        tr(step, "title_ar");
+        ["description", "accept_criteria", "inspection_method", "inspection_repeat", "reject_action", "spec_value"]
+          .forEach(k => tr(step, k));
+      });
+    });
+    (clone.tools || []).forEach(t => { tr(t, "name"); tr(t, "spec"); });
+    (clone.references || []).forEach(r => tr(r, "ref_text"));
+
+    await Promise.all(jobs);
+
+    // مصفوفات المتطلبات (كل عنصر لوحده) بعد باقي الحقول
+    const reqJobs = [];
+    (clone.stages || []).forEach(stage => (stage.steps || []).forEach(step => {
+      if (Array.isArray(step.requirements) && step.requirements.length) {
+        reqJobs.push((async () => {
+          step.requirements = await Promise.all(step.requirements.map(async r => {
+            if (r && /[\u0600-\u06FF]/.test(r)) {
+              try { return (await autoTranslate(r)) || r; } catch (_) { return r; }
+            }
+            return r;
+          }));
+        })());
+      }
+    }));
+    await Promise.all(reqJobs);
+
+    return clone;
+  },
+
+  async renderViewer(main, sopId, opts = {}) {
     main.innerHTML = `<div class="spinner"></div>`;
-    let sop;
-    try { sop = await DB.getSopFull(sopId); }
-    catch (e) { main.innerHTML = `<div class="empty-state">${esc(e.message)}</div>`; return; }
+    let sop = opts.sop;
+    if (!sop) {
+      try { sop = await DB.getSopFull(sopId); }
+      catch (e) { main.innerHTML = `<div class="empty-state">${esc(e.message)}</div>`; return; }
+    }
+    const originalSop = opts.originalSop || sop;
+    const isTranslated = !!opts.isTranslated;
 
     main.innerHTML = "";
     const head = document.createElement("div");
@@ -555,12 +612,30 @@ const App = {
     head.innerHTML = `
       <div></div>
       <div style="display:flex; gap:8px;">
+        <button class="btn btn-ghost" id="translate-btn">${isTranslated ? "🇸🇦 العربية" : "🌐 English"}</button>
         ${Auth.canEdit() ? `<a href="#/sop/${sop.id}/edit" class="btn">✏️ تعديل</a>` : ""}
         <button class="btn btn-ghost" id="factory-print-btn">📊 نسخة الجدول (Excel)</button>
         <button class="btn btn-primary" id="print-btn">🖨️ طباعة / PDF</button>
       </div>
     `;
     main.appendChild(head);
+    head.querySelector("#translate-btn").onclick = async (ev) => {
+      if (isTranslated) {
+        return this.renderViewer(main, sopId, { sop: originalSop, isTranslated: false });
+      }
+      const btn = ev.currentTarget;
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Translating...";
+      try {
+        const translated = await this.translateSopClone(originalSop);
+        await this.renderViewer(main, sopId, { sop: translated, originalSop, isTranslated: true });
+      } catch (e) {
+        toast(e.message, true);
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    };
     head.querySelector("#print-btn").onclick = async (ev) => {
       const btn = ev.currentTarget;
       btn.disabled = true;
@@ -624,19 +699,6 @@ const App = {
       `);
     }
 
-    // 4) الأدوات والمواد
-    if (sop.tools && sop.tools.length) {
-      const catLabel = { tool: "أداة", instrument: "جهاز قياس", material: "مادة" };
-      main.insertAdjacentHTML("beforeend", `
-        <div class="view-section">
-          <h2 class="section-title">الأدوات والمواد المطلوبة</h2>
-          <ul class="req-list">
-            ${sop.tools.map(t => `<li>[${esc(catLabel[t.category] || t.category)}] ${esc(t.name)}${t.spec ? ` — ${esc(t.spec)}` : ""}</li>`).join("")}
-          </ul>
-        </div>
-      `);
-    }
-
     // 7) السلامة
     if (sop.safety_notes) {
       main.insertAdjacentHTML("beforeend", `
@@ -671,9 +733,12 @@ const App = {
           <div class="step-idx">${stIdx + 1}</div>
           <div class="step-body">
             <h3>${esc(step.title_ar || step.title)} ${step.is_critical ? '<span class="badge critical">حرجة</span>' : ""}</h3>
-            ${step.requirements && step.requirements.length ? `
+            ${(step.requirements && step.requirements.length) ? `
               <div class="hint"><b>المعدات والآلات المستخدمة:</b></div>
               <ul class="req-list">${step.requirements.map(r => `<li>${esc(r)}</li>`).join("")}</ul>
+            ` : (sop.tools && sop.tools.length) ? `
+              <div class="hint"><b>المعدات والآلات المستخدمة (عام):</b></div>
+              <ul class="req-list">${sop.tools.map(t => `<li>${esc(t.name)}${t.spec ? ` — ${esc(t.spec)}` : ""}</li>`).join("")}</ul>
             ` : ""}
             ${sop.safety_notes ? `<div class="hint">⚠️ مهمات وإجراءات الوقاية: ${esc(sop.safety_notes)}</div>` : ""}
             ${step.description ? `<div class="step-desc">${esc(step.description)}</div>` : ""}
