@@ -16,7 +16,6 @@ const Editor = {
     this._saveFns = [];
     container.innerHTML = "";
     container.appendChild(this.buildHeaderForm(sop));
-    container.appendChild(this.buildWorkflowBox(sop));
 
     const stageHead = document.createElement("h2");
     stageHead.className = "section-title";
@@ -42,6 +41,9 @@ const Editor = {
     container.appendChild(this.buildToolsSection(sop));
     container.appendChild(this.buildReferencesSection(sop));
     container.appendChild(this.buildRevisionHistory(sop));
+
+    // سايكل الموافقات — في الآخر خالص، بعد ما تخلّص إضافة كل الخطوات والتعديلات
+    container.appendChild(this.buildWorkflowBox(sop));
 
     // زرار الحفظ الوحيد لكل الفورم — تحت خالص، بيحفظ كل حاجة كتبتها وبيبعت الـ SOP للمراجعة على طول
     const saveBar = document.createElement("div");
@@ -105,6 +107,7 @@ const Editor = {
         <div class="field"><label>Title (English)</label><input id="f-title" value="${attr(sop.title)}"/></div>
       </div>
       <div class="field-row">
+        <div class="field"><label>المصنع</label><input id="f-factory" value="${attr(sop.factory)}" placeholder="مثال: مصنع سادات سيتي"/></div>
         <div class="field"><label>الخط</label><input id="f-station" value="${attr(sop.station)}" placeholder="مثال: التجميع النهائي"/></div>
         <div class="field" style="max-width:150px;"><label>رقم المحطة على الخط (فريد)</label><input id="f-station-no" type="number" min="1" value="${sop.station_no ?? ""}" placeholder="مثال: 1"/></div>
       </div>
@@ -183,6 +186,7 @@ const Editor = {
         status: Auth.isAdmin() ? card.querySelector("#f-status").value : sop.status,
         title_ar: card.querySelector("#f-title-ar").value.trim(),
         title: card.querySelector("#f-title").value.trim() || card.querySelector("#f-title-ar").value.trim(),
+        factory: card.querySelector("#f-factory").value.trim() || null,
         station: card.querySelector("#f-station").value.trim(),
         station_no: stationNoRaw === "" ? null : Number(stationNoRaw),
         inspection_frequency: card.querySelector("#f-freq").value.trim() || null,
