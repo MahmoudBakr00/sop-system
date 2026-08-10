@@ -212,7 +212,6 @@ const PdfExport = {
           <th${sop.video_url ? ' style="width:110px;"' : ""}>${sop.video_url ? `فيديو الفحص<br/><span class="en">Video — Scan</span>` : `المسؤولية<br/><span class="en">Responsibility</span>`}</th>
           <th>بيئة الفحص<br/><span class="en">Inspection Environment</span></th>
           <th>عدد مرات الفحص<br/><span class="en">Inspection Frequency</span></th>
-          <th>المعدات المستخدمة<br/><span class="en">Equipment Used</span></th>
           <th>الخط<br/><span class="en">Line</span></th>
           <th>حالة الاعتماد<br/><span class="en">Approval Status</span></th>
         </tr>
@@ -220,7 +219,6 @@ const PdfExport = {
           <td>${sop.video_url ? `<img class="qr-target xsheet-info-qr" data-video="${esc(sopViewUrl(sop))}" />` : esc(roles || "-")}</td>
           <td>${esc(sop.inspection_environment || "-")}</td>
           <td>${esc(sop.inspection_frequency || "-")}</td>
-          <td>${esc(toolsTxt || "-")}</td>
           <td>${esc(sop.station || "-")}</td>
           <td>${esc(approvalLabels[sop.approval_status] || sop.approval_status || "-")}</td>
         </tr>
@@ -285,7 +283,7 @@ const PdfExport = {
           <td>${idx}</td>
           <td><b>${esc(step.title_ar || step.title)}</b></td>
           <td>${esc(step.inspection_method || "-")}</td>
-          <td>${(step.requirements || []).map(esc).join("<br/>") || "-"}</td>
+          <td>${(step.requirements && step.requirements.length) ? step.requirements.map(esc).join("<br/>") : (esc(toolsTxt) || "-")}</td>
           <td>${esc(step.accept_criteria || "-")}</td>
           <td>${esc(step.description || "-")}</td>
           <td class="xsheet-img-cell">
@@ -343,6 +341,7 @@ const PdfExport = {
 
     let logoUrl = "";
     try { logoUrl = (await DB.getAppSettings()).logo_url || ""; } catch (_) { /* no logo yet */ }
+    const toolsTxt = (sop.tools || []).map(t => t.name).join("، ");
 
     sheet.innerHTML = `
       <div class="psheet-head">
@@ -383,14 +382,6 @@ const PdfExport = {
       ${sop.pre_work_procedure ? `
         <div class="psheet-block"><b>قبل العمل (Pre-work):</b> ${esc(sop.pre_work_procedure)}</div>
       ` : ""}
-      ${(sop.tools && sop.tools.length) ? `
-        <div class="psheet-block">
-          <b>الأدوات والمواد المطلوبة:</b>
-          <ul class="psheet-list">
-            ${sop.tools.map(t => `<li>${esc(t.name)}${t.spec ? ` — ${esc(t.spec)}` : ""}</li>`).join("")}
-          </ul>
-        </div>
-      ` : ""}
       ${sop.safety_notes ? `
         <div class="psheet-block psheet-safety"><b>⚠️ السلامة:</b> ${esc(sop.safety_notes)}</div>
       ` : ""}
@@ -410,8 +401,10 @@ const PdfExport = {
             <div class="pnum">${stepNo}</div>
             <div style="flex:1;">
               <h3>${esc(step.title_ar || step.title)} ${step.is_critical ? '<span class="psheet-critical">حرجة</span>' : ""}</h3>
-              ${step.requirements && step.requirements.length ? `
-                <div class="psheet-req"><b>المعدات والآلات المستخدمة:</b> ${step.requirements.map(r => esc(r)).join(" · ")}</div>
+              ${(step.requirements && step.requirements.length) || toolsTxt ? `
+                <div class="psheet-req"><b>المعدات والآلات المستخدمة:</b> ${
+                  (step.requirements && step.requirements.length) ? step.requirements.map(r => esc(r)).join(" · ") : esc(toolsTxt)
+                }</div>
               ` : ""}
               ${sop.safety_notes ? `<div class="psheet-req">⚠️ <b>مهمات وإجراءات الوقاية:</b> ${esc(sop.safety_notes)}</div>` : ""}
               ${step.description ? `<p>${esc(step.description)}</p>` : ""}
