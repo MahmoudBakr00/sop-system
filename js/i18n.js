@@ -147,11 +147,18 @@ const I18N = {
   },
 
   // بيراقب أي تغييرات جوه الصفحة (لإن أغلب الصفحات بترندر بشكل async على مراحل)
-  // ويطبّق الترجمة تلقائيًا على أي محتوى جديد يتضاف طول ما اللغة إنجليزي
+  // ويطبّق الترجمة تلقائيًا على أي محتوى جديد يتضاف طول ما اللغة إنجليزي.
+  // ملاحظة مهمة: بنأجّل (debounce) الفحص لحد ما التغييرات تهدى، بدل ما نفحص
+  // الصفحة كاملة مع كل تغيير صغير — عشان كده كان بيعلّق الصفحة أثناء التحميل.
   watch(root) {
     if (this._observer) this._observer.disconnect();
     this.translateDom(root);
-    this._observer = new MutationObserver(() => this.translateDom(root));
+    let timer = null;
+    this._observer = new MutationObserver(() => {
+      if (this.lang !== "en") return;
+      clearTimeout(timer);
+      timer = setTimeout(() => this.translateDom(root), 120);
+    });
     this._observer.observe(root, { childList: true, subtree: true, characterData: true });
   },
 };
