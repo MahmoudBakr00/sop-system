@@ -169,9 +169,9 @@ const DB = {
   },
 
   // ---------- إزاحة أرقام المحطات (لإفساح مكان لمحطة جديدة تتحط بينهم) ----------
-  async shiftStationNos(station, fromStationNoInclusive) {
+  async shiftStationNos(station, fromStationNoInclusive, docType = "SOP") {
     const { data: rows, error: e1 } = await supabaseClient
-      .from("sops").select("id, station_no").eq("station", station).gte("station_no", fromStationNoInclusive);
+      .from("sops").select("id, station_no").eq("station", station).eq("doc_type", docType).gte("station_no", fromStationNoInclusive);
     if (e1) throw e1;
     // من الأكبر للأصغر عشان مايحصلش تصادم مؤقت مع الـ unique index
     const sorted = [...rows].sort((a, b) => b.station_no - a.station_no);
@@ -181,9 +181,9 @@ const DB = {
   },
 
   // ---------- كود تلقائي من اسم المحطة ----------
-  async generateSopCode(sopId, station) {
+  async generateSopCode(sopId, station, docType = "SOP") {
     const { data, error } = await supabaseClient.rpc("generate_sop_code", {
-      p_sop_id: sopId, p_station: station,
+      p_sop_id: sopId, p_station: station, p_doc_type: docType,
     });
     if (error) throw error;
     return data; // الكود الجديد
@@ -272,6 +272,7 @@ const DB = {
 
     const { data: newSop, error: e1 } = await supabaseClient.from("sops").insert({
       title: original.title, title_ar: original.title_ar ? `${original.title_ar} (نسخة)` : original.title_ar,
+      doc_type: original.doc_type || "SOP",
       factory: overrides.factory ?? original.factory,
       station: overrides.station ?? original.station,
       station_no: null, flow_lane: 0, // عشان مايتصدمش مع رقم محطة مستخدم أصلًا
