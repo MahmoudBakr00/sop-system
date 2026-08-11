@@ -40,6 +40,8 @@ const I18N = {
     "مسودة": "Draft",
     "مؤرشفة": "Archived",
     "عرض": "View",
+    "📋 نسخ": "📋 Duplicate",
+    "📋 نسخ لمصنع تاني": "📋 Duplicate to another factory",
     "تعديل": "Edit",
     "حذف": "Delete",
     "فلو الخط — ترتيب الـ SOPs (المحطات) ورا بعض": "Line Flow — SOPs (stations) in order",
