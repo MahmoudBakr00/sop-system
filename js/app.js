@@ -456,9 +456,21 @@ const App = {
       <div class="actions">
         <a class="btn btn-sm" href="#/sop/${sop.id}">عرض</a>
         ${Auth.canEdit() ? `<a class="btn btn-sm btn-ghost" href="#/sop/${sop.id}/edit">تعديل</a>` : ""}
+        ${Auth.canEdit() ? `<button class="btn btn-sm btn-ghost dup-btn">📋 نسخ</button>` : ""}
         ${Auth.isAdmin() ? `<button class="btn btn-sm btn-danger del-btn">حذف</button>` : ""}
       </div>
     `;
+    if (Auth.canEdit()) {
+      card.querySelector(".dup-btn").onclick = async () => {
+        const factory = prompt(`انسخ "${sop.title_ar || sop.title}" لمصنع (سيب الحقل فاضي عشان يفضل نفس المصنع):`, sop.factory || "");
+        if (factory === null) return; // اتلغى
+        try {
+          const created = await DB.duplicateSop(sop.id, { factory: factory.trim() || null });
+          toast("تم نسخ الـ SOP بنجاح");
+          location.hash = `#/sop/${created.id}/edit`;
+        } catch (e) { toast(e.message, true); }
+      };
+    }
     if (Auth.isAdmin()) {
       card.querySelector(".del-btn").onclick = async () => {
         if (!confirm(`حذف "${sop.title_ar || sop.title}" نهائيًا؟`)) return;
@@ -666,11 +678,28 @@ const App = {
       <div style="display:flex; gap:8px;">
         <button class="btn btn-ghost" id="translate-btn">${isTranslated ? "🇸🇦 العربية" : "🌐 English"}</button>
         ${Auth.canEdit() ? `<a href="#/sop/${sop.id}/edit" class="btn">✏️ تعديل</a>` : ""}
+        ${Auth.canEdit() ? `<button class="btn btn-ghost" id="dup-btn">📋 نسخ لمصنع تاني</button>` : ""}
         <button class="btn btn-ghost" id="factory-print-btn">📊 نسخة الجدول (Excel)</button>
         <button class="btn btn-primary" id="print-btn">🖨️ طباعة / PDF</button>
       </div>
     `;
     main.appendChild(head);
+    const dupBtn = head.querySelector("#dup-btn");
+    if (dupBtn) dupBtn.onclick = async () => {
+      const factory = prompt(`انسخ "${sop.title_ar || sop.title}" لمصنع (سيب الحقل فاضي عشان يفضل نفس المصنع):`, sop.factory || "");
+      if (factory === null) return;
+      dupBtn.disabled = true;
+      dupBtn.textContent = "جاري النسخ...";
+      try {
+        const created = await DB.duplicateSop(sop.id, { factory: factory.trim() || null });
+        toast("تم نسخ الـ SOP بنجاح");
+        location.hash = `#/sop/${created.id}/edit`;
+      } catch (e) {
+        toast(e.message, true);
+        dupBtn.disabled = false;
+        dupBtn.textContent = "📋 نسخ لمصنع تاني";
+      }
+    };
     head.querySelector("#translate-btn").onclick = async (ev) => {
       if (isTranslated) {
         return this.renderViewer(main, sopId, { sop: originalSop, isTranslated: false });
