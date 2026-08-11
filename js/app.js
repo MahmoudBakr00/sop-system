@@ -90,7 +90,11 @@ const App = {
 
       const out = document.createElement("button");
       out.textContent = "خروج";
-      out.onclick = () => Auth.signOut();
+      out.onclick = async () => {
+        await Auth.signOut();
+        await Auth.refresh();
+        await App.render();
+      };
       nav.appendChild(out);
     }
     return bar;
@@ -177,8 +181,12 @@ const App = {
       const errEl = box.querySelector("#a-error");
       errEl.style.display = "none";
       try {
-        if (mode === "login") await Auth.signIn(email, pass);
-        else {
+        if (mode === "login") {
+          await Auth.signIn(email, pass);
+          await Auth.refresh();
+          await App.render();
+          return;
+        } else {
           await Auth.signUp(email, pass, email.split("@")[0]);
           errEl.style.display = "block";
           errEl.style.color = "var(--ok)";
@@ -207,6 +215,11 @@ const App = {
         <input id="search-box" placeholder="ابحث بالاسم أو الكود..."/>
         <select id="factory-filter">
           <option value="">كل المصانع</option>
+        </select>
+        <select id="doctype-filter">
+          <option value="">SOP و SIP</option>
+          <option value="SOP">SOP فقط (تجميع)</option>
+          <option value="SIP">SIP فقط (فحص)</option>
         </select>
         <select id="status-filter">
           <option value="">كل الحالات</option>
@@ -239,10 +252,12 @@ const App = {
       const search = main.querySelector("#search-box").value.trim();
       const status = main.querySelector("#status-filter").value;
       const factory = main.querySelector("#factory-filter").value;
+      const docType = main.querySelector("#doctype-filter").value;
       const grid = main.querySelector("#sop-grid");
       grid.innerHTML = `<div class="spinner"></div>`;
       try {
-        const sops = await DB.listSops({ search, status, factory });
+        let sops = await DB.listSops({ search, status, factory });
+        if (docType) sops = sops.filter(s => (s.doc_type || "SOP") === docType);
         grid.innerHTML = "";
         if (!sops.length) {
           grid.innerHTML = `<div class="empty-state">لا توجد SOPs بعد. ${Auth.canEdit() ? "ابدأ بإضافة واحدة." : ""}</div>`;
@@ -254,6 +269,7 @@ const App = {
     main.querySelector("#search-box").addEventListener("input", debounce(load, 300));
     main.querySelector("#status-filter").addEventListener("change", load);
     main.querySelector("#factory-filter").addEventListener("change", load);
+    main.querySelector("#doctype-filter").addEventListener("change", load);
     await load();
   },
 
@@ -333,35 +349,44 @@ const App = {
       return root;
     }
 
-    // تجميع حسب رقم المحطة (عمود)، وترتيب كل عمود حسب المسار الموازي (صف)
+    // تجميع حسب (رقم المحطة + نوع المستند) كعمود، وترتيب كل عمود حسب المسار الموازي (صف)
+    // لو SOP وSIP بنفس رقم المحطة، بيبقوا عمودين متتاليين (SOP الأول ثم SIP) مش مسار موازي واحد
     const columns = {};
     sops.forEach(s => {
-      const key = s.station_no ?? "none";
+      const dt = s.doc_type || "SOP";
+      const key = `${s.station_no ?? "none"}::${dt}`;
       (columns[key] = columns[key] || []).push(s);
     });
     Object.values(columns).forEach(col => col.sort((a, b) => a.flow_lane - b.flow_lane));
+    const typeOrder = { SOP: 0, SIP: 1 };
     const colKeys = Object.keys(columns).sort((a, b) => {
-      if (a === "none") return 1;
-      if (b === "none") return -1;
-      return Number(a) - Number(b);
+      const [aNoRaw, aType] = a.split("::");
+      const [bNoRaw, bType] = b.split("::");
+      if (aNoRaw === "none" && bNoRaw === "none") return 0;
+      if (aNoRaw === "none") return 1;
+      if (bNoRaw === "none") return -1;
+      const aNo = Number(aNoRaw), bNo = Number(bNoRaw);
+      if (aNo !== bNo) return aNo - bNo;
+      return (typeOrder[aType] ?? 0) - (typeOrder[bType] ?? 0);
     });
 
     const addNode = async (refSop, dir) => {
       try {
+        const docType = refSop.doc_type || "SOP";
         let newStationNo = refSop.station_no ?? 0;
         let newLane = 0;
         if (dir === "before") {
-          await DB.shiftStationNos(line, newStationNo);
+          await DB.shiftStationNos(line, newStationNo, docType);
         } else if (dir === "after") {
           newStationNo = newStationNo + 1;
-          await DB.shiftStationNos(line, newStationNo);
+          await DB.shiftStationNos(line, newStationNo, docType);
         } else if (dir === "lane-up" || dir === "lane-down") {
-          const col = columns[refSop.station_no ?? "none"] || [refSop];
+          const col = columns[`${refSop.station_no ?? "none"}::${docType}`] || [refSop];
           const lanes = col.map(s => s.flow_lane ?? 0);
           newLane = dir === "lane-up" ? Math.min(...lanes) - 1 : Math.max(...lanes) + 1;
         }
         const created = await DB.createSop({
-          title: "SOP جديد", title_ar: "SOP جديد", status: "draft",
+          title: `${docType} جديد`, title_ar: `${docType} جديد`, status: "draft", doc_type: docType,
           station: line, station_no: newStationNo, flow_lane: newLane,
         });
         location.hash = `#/sop/${created.id}/edit`;
@@ -380,15 +405,16 @@ const App = {
       const colEl = document.createElement("div");
       colEl.className = "station-col";
       columns[key].forEach(sop => {
+        const dt = sop.doc_type || "SOP";
         const cell = document.createElement("div");
         cell.className = "station-cell";
         cell.innerHTML = `
           <button class="node-plus plus-top" title="أضف محطة موازية فوق">+</button>
-          <button class="node-plus plus-right" title="أضف محطة قبلها">+</button>
-          <button class="node-plus plus-left" title="أضف محطة بعدها">+</button>
+          <button class="node-plus plus-right" title="أضف محطة قبلها (نفس النوع)">+</button>
+          <button class="node-plus plus-left" title="أضف محطة بعدها (نفس النوع)">+</button>
           <button class="node-plus plus-bottom" title="أضف محطة موازية تحت">+</button>
-          <a href="#/sop/${sop.id}" class="station-node">
-            <div class="station-badge">${sop.station_no ?? "؟"}</div>
+          <a href="#/sop/${sop.id}" class="station-node ${dt === "SIP" ? "station-node-sip" : ""}">
+            <div class="station-badge">${sop.station_no ?? "؟"} <span class="station-doctype">${dt}</span></div>
             <div class="station-label">${esc(sop.title_ar || sop.title)}</div>
             <div class="station-sub">${esc(sop.code || "بدون كود")}</div>
           </a>
@@ -445,7 +471,7 @@ const App = {
     const card = document.createElement("div");
     card.className = `sop-card status-${sop.status}`;
     card.innerHTML = `
-      <div class="code">${esc(sop.code || "بدون كود")}</div>
+      <div class="code">${esc(sop.code || "بدون كود")} <span class="badge doctype-${(sop.doc_type || "SOP").toLowerCase()}">${sop.doc_type || "SOP"}</span></div>
       <h3>${esc(sop.title_ar || sop.title)}</h3>
       <div class="meta">
         <span class="badge ${sop.status}">${statusLabel(sop.status)}</span>
@@ -484,11 +510,34 @@ const App = {
   // ---------------- New ----------------
   async renderNew(main) {
     if (!Auth.canEdit()) { main.innerHTML = `<div class="empty-state">ليس لديك صلاحية الإضافة</div>`; return; }
-    main.innerHTML = `<div class="spinner"></div>`;
-    try {
-      const sop = await DB.createSop({ title: "SOP جديد", title_ar: "SOP جديد", status: "draft" });
-      this.navigate(`#/sop/${sop.id}/edit`, true);
-    } catch (e) { main.innerHTML = `<div class="empty-state">${esc(e.message)}</div>`; }
+    main.innerHTML = `
+      <div class="page-head">
+        <div><h1>إنشاء مستند جديد</h1><p>اختار نوع المستند الأول</p></div>
+      </div>
+      <div class="doc-type-choice">
+        <button class="doc-type-card" id="choose-sop">
+          <div class="doc-type-icon">📋</div>
+          <div class="doc-type-title">SOP</div>
+          <div class="doc-type-sub">لإجراءات التجميع (Assembly)</div>
+        </button>
+        <button class="doc-type-card" id="choose-sip">
+          <div class="doc-type-icon">🔍</div>
+          <div class="doc-type-title">SIP</div>
+          <div class="doc-type-sub">لإجراءات الفحص (Inspection)</div>
+        </button>
+      </div>
+    `;
+    const createDoc = async (docType) => {
+      main.innerHTML = `<div class="spinner"></div>`;
+      try {
+        const sop = await DB.createSop({
+          title: `${docType} جديد`, title_ar: `${docType} جديد`, status: "draft", doc_type: docType,
+        });
+        this.navigate(`#/sop/${sop.id}/edit`, true);
+      } catch (e) { main.innerHTML = `<div class="empty-state">${esc(e.message)}</div>`; }
+    };
+    main.querySelector("#choose-sop").onclick = () => createDoc("SOP");
+    main.querySelector("#choose-sip").onclick = () => createDoc("SIP");
   },
 
   // ---------------- إدارة المستخدمين (admin فقط) ----------------
@@ -822,6 +871,7 @@ const App = {
               <ul class="req-list">${sop.tools.map(t => `<li>${esc(t.name)}${t.spec ? ` — ${esc(t.spec)}` : ""}</li>`).join("")}</ul>
             ` : ""}
             ${sop.safety_notes ? `<div class="hint">⚠️ مهمات وإجراءات الوقاية: ${esc(sop.safety_notes)}</div>` : ""}
+            ${step.process_sequence ? `<div class="step-desc"><b>تسلسل الإجراءات:</b> ${esc(step.process_sequence)}</div>` : ""}
             ${step.description ? `<div class="step-desc">${esc(step.description)}</div>` : ""}
             ${step.images && step.images.length ? `
               <div class="step-images">
@@ -833,11 +883,14 @@ const App = {
                 `).join("")}
               </div>
             ` : ""}
-            ${(step.accept_criteria || step.inspection_method || step.inspection_repeat || step.reject_action) ? `
+            ${(step.accept_criteria || step.criteria_definition || step.inspection_method || step.inspection_repeat || step.reject_action) ? `
               <div class="accept-reject">
-                ${step.accept_criteria ? `<div class="ar-ok">✔ معيار القبول: ${esc(step.accept_criteria)}</div>` : ""}
+                ${step.accept_criteria ? `<div class="ar-ok">✔ ${(sop.doc_type === "SOP") ? "مضمون الفحص" : "معيار القبول"}: ${esc(step.accept_criteria)}</div>` : ""}
+                ${step.criteria_definition ? `<div class="hint">تحديد المعيار: ${esc(step.criteria_definition)}</div>` : ""}
                 ${step.inspection_method ? `<div class="hint">طريقة الفحص: ${esc(step.inspection_method)}</div>` : ""}
                 ${step.inspection_repeat ? `<div class="hint">التكرار: ${esc(step.inspection_repeat)}</div>` : ""}
+                ${step.time_seconds != null ? `<div class="hint">الزمن: ${esc(step.time_seconds)} ثانية</div>` : ""}
+                ${step.accident_prevention ? `<div class="hint">⚠️ تجنب الحوادث: ${esc(step.accident_prevention)}</div>` : ""}
                 ${step.reject_action ? `<div class="ar-bad">↩ الإجراء عند الرفض: ${esc(step.reject_action)}</div>` : ""}
               </div>
             ` : ""}
