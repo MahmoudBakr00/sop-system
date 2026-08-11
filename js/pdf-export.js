@@ -197,7 +197,8 @@ const PdfExport = {
         </div>
         <div class="xsheet-docno">
           Ver. ${esc(sop.version || 1)}<br/>
-          <b>NO. ${esc(sop.code || "بدون كود")}</b>
+          <b>NO. ${esc(sop.code || "بدون كود")}</b><br/>
+          <span style="font-size:11px; background:${sop.doc_type === "SIP" ? "#a3701e" : "#122c47"}; color:#fff; padding:2px 8px; border-radius:8px;">${esc(sop.doc_type || "SOP")}</span>
         </div>
       </div>
 
@@ -301,6 +302,9 @@ const PdfExport = {
       tbody.innerHTML = `<tr><td colspan="10" class="hint">لا توجد خطوات مضافة بعد.</td></tr>`;
     }
 
+    // لو الواجهة على وضع الإنجليزي، ترجم رؤوس الأقسام/الأعمدة بس (مش محتوى البيانات)
+    if (typeof I18N !== "undefined" && I18N.lang === "en") I18N.translateDom(sheet);
+
     // Render QR code للفيديو (لو موجود) قبل الالتقاط
     sheet.querySelectorAll(".qr-target").forEach(img => {
       const tmp = document.createElement("div");
@@ -347,7 +351,9 @@ const PdfExport = {
       <div class="psheet-head">
         ${logoUrl ? `<img class="psheet-logo" src="${esc(logoUrl)}" crossorigin="anonymous"/>` : `<div class="psheet-logo"></div>`}
         <div style="flex:1;">
-          <div class="code"><b>Document No: ${esc(sop.code || "بدون كود")}</b></div>
+          <div class="code"><b>Document No: ${esc(sop.code || "بدون كود")}</b>
+            <span style="font-size:11px; background:${sop.doc_type === "SIP" ? "#a3701e" : "#122c47"}; color:#fff; padding:2px 8px; border-radius:8px; margin-inline-start:6px;">${esc(sop.doc_type || "SOP")}</span>
+          </div>
           <h1>${esc(sop.title_ar || sop.title)}</h1>
           <div class="code">${esc(sop.title_ar ? sop.title : "")}</div>
         </div>
@@ -407,10 +413,14 @@ const PdfExport = {
                 }</div>
               ` : ""}
               ${sop.safety_notes ? `<div class="psheet-req">⚠️ <b>مهمات وإجراءات الوقاية:</b> ${esc(sop.safety_notes)}</div>` : ""}
+              ${step.process_sequence ? `<div class="psheet-req"><b>تسلسل الإجراءات:</b> ${esc(step.process_sequence)}</div>` : ""}
               ${step.description ? `<p>${esc(step.description)}</p>` : ""}
-              ${step.accept_criteria ? `<div class="psheet-req">✔ <b>معيار القبول:</b> ${esc(step.accept_criteria)}</div>` : ""}
+              ${step.accept_criteria ? `<div class="psheet-req">✔ <b>${sop.doc_type === "SOP" ? "مضمون الفحص" : "معيار القبول"}:</b> ${esc(step.accept_criteria)}</div>` : ""}
+              ${step.criteria_definition ? `<div class="psheet-req"><b>تحديد المعيار:</b> ${esc(step.criteria_definition)}</div>` : ""}
               ${step.inspection_method ? `<div class="psheet-req"><b>طريقة الفحص:</b> ${esc(step.inspection_method)}</div>` : ""}
               ${step.inspection_repeat ? `<div class="psheet-req"><b>التكرار:</b> ${esc(step.inspection_repeat)}</div>` : ""}
+              ${step.time_seconds != null ? `<div class="psheet-req"><b>الزمن:</b> ${esc(step.time_seconds)} ثانية</div>` : ""}
+              ${step.accident_prevention ? `<div class="psheet-req">⚠️ <b>تجنب الحوادث:</b> ${esc(step.accident_prevention)}</div>` : ""}
               ${step.reject_action ? `<div class="psheet-req">↩ <b>الإجراء عند الرفض:</b> ${esc(step.reject_action)}</div>` : ""}
               ${step.responsible_role ? `<div class="psheet-req"><b>المسؤول:</b> ${esc(roleLabelPdf(step.responsible_role))}</div>` : ""}
               ${step.spec_value ? `<div class="psheet-req"><b>مواصفة فنية:</b> ${esc(step.spec_value)}</div>` : ""}
@@ -497,6 +507,9 @@ const PdfExport = {
         else if (c) img.src = c.src;
       });
     });
+
+    // لو الواجهة على وضع الإنجليزي، ترجم رؤوس الأقسام بس (مش محتوى البيانات)
+    if (typeof I18N !== "undefined" && I18N.lang === "en") I18N.translateDom(sheet);
 
     if (onProgress) onProgress("جاري تجهيز الصور...");
     await waitForImages(sheet);
