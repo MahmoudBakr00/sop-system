@@ -91,9 +91,9 @@ const App = {
       const out = document.createElement("button");
       out.textContent = "خروج";
       out.onclick = async () => {
+        out.disabled = true;
         await Auth.signOut();
-        await Auth.refresh();
-        await App.render();
+        location.reload(); // ريفريش حقيقي — نفس اللي كان بيحل المشكلة يدوي
       };
       nav.appendChild(out);
     }
@@ -179,24 +179,31 @@ const App = {
       const email = box.querySelector("#a-email").value.trim();
       const pass = box.querySelector("#a-pass").value;
       const errEl = box.querySelector("#a-error");
+      const submitBtn = box.querySelector("#a-submit");
+      const originalLabel = submitBtn.textContent;
       errEl.style.display = "none";
+      submitBtn.disabled = true;
+      submitBtn.textContent = mode === "login" ? "جاري الدخول..." : "جاري الإنشاء...";
       try {
         if (mode === "login") {
           await Auth.signIn(email, pass);
-          await Auth.refresh();
-          await App.render();
+          location.reload(); // ريفريش حقيقي — بيضمن قراءة الجلسة صح حتى لو المتصفح بطّأ حفظها
           return;
         } else {
           await Auth.signUp(email, pass, email.split("@")[0]);
           errEl.style.display = "block";
           errEl.style.color = "var(--ok)";
           errEl.textContent = "تم إنشاء الحساب. تحقق من بريدك إن وجد تأكيد، ثم سجّل الدخول. صلاحيتك الافتراضية: مشاهدة فقط.";
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalLabel;
           return;
         }
       } catch (e) {
         errEl.style.display = "block";
         errEl.style.color = "";
         errEl.textContent = e.message;
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
       }
     };
     main.appendChild(box);
