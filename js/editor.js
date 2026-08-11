@@ -103,7 +103,13 @@ const Editor = {
     card.innerHTML = `
       <h2>البيانات الأساسية</h2>
       <div class="field-row">
-        <div class="field"><label>رقم/كود المستند (يتولّد تلقائيًا من اسم الخط)</label>
+        <div class="field" style="max-width:140px;"><label>نوع المستند</label>
+          <select id="f-doc-type">
+            <option value="SOP" ${sop.doc_type !== "SIP" ? "selected" : ""}>SOP — تجميع</option>
+            <option value="SIP" ${sop.doc_type === "SIP" ? "selected" : ""}>SIP — فحص</option>
+          </select>
+        </div>
+        <div class="field"><label>رقم/كود المستند (يتولّد تلقائيًا من اسم الخط ونوع المستند)</label>
           <input id="f-code" value="${attr(sop.code || "— هيتولّد بعد ما تحفظ اسم الخط —")}" disabled/>
         </div>
         <div class="field"><label>الحالة</label>
@@ -194,8 +200,10 @@ const Editor = {
 
     this.registerSave(async () => {
       const stationNoRaw = card.querySelector("#f-station-no").value.trim();
+      const docType = card.querySelector("#f-doc-type").value;
       const payload = {
         status: Auth.isAdmin() ? card.querySelector("#f-status").value : sop.status,
+        doc_type: docType,
         title_ar: card.querySelector("#f-title-ar").value.trim(),
         title: card.querySelector("#f-title").value.trim() || card.querySelector("#f-title-ar").value.trim(),
         factory: card.querySelector("#f-factory").value.trim() || null,
@@ -220,13 +228,13 @@ const Editor = {
         Object.assign(sop, updated);
         // لو الكود لسه مش متولّد وفيه اسم خط، ولّده دلوقتي
         if (!sop.code && payload.station) {
-          const newCode = await DB.generateSopCode(sop.id, payload.station);
+          const newCode = await DB.generateSopCode(sop.id, payload.station, docType);
           sop.code = newCode;
           card.querySelector("#f-code").value = newCode;
         }
       } catch (e) {
-        if (String(e.message).includes("uq_sop_station_no") || e.code === "23505") {
-          throw new Error("رقم المحطة هذا مُستخدم بالفعل في نفس الخط — يُرجى اختيار رقم آخر");
+        if (String(e.message).includes("uq_sop_station_no") || String(e.message).includes("uq_sop_station_lane") || e.code === "23505") {
+          throw new Error(`رقم المحطة هذا مُستخدم بالفعل في نفس الخط ونفس النوع (${docType}) — يُرجى اختيار رقم آخر`);
         }
         throw e;
       }
@@ -563,17 +571,21 @@ const Editor = {
       ["", "— اختر —"], ["operator", "عامل تشغيل (Operator)"], ["supervisor", "مشرف (Supervisor)"],
       ["qc", "مراقبة جودة (QC)"], ["maintenance", "صيانة (Maintenance)"], ["other", "أخرى"],
     ];
-    el.innerHTML = `
+    const isSop = (sop.doc_type || "SOP") === "SOP";
+
+    const titleFieldHtml = `
       <div class="field-row">
-        <div class="field"><label>1) الخطوة ${stIdx + 1} (عربي)</label><input class="sp-title-ar" value="${attr(step.title_ar)}"/></div>
+        <div class="field"><label>1) ${isSop ? "العمل المطلوب" : "الخطوة"} ${stIdx + 1} (عربي)</label><input class="sp-title-ar" value="${attr(step.title_ar)}"/></div>
         <div class="field"><label>Title (English) — تلقائي</label><input class="sp-title" value="${attr(step.title)}"/></div>
       </div>
+    `;
 
+    const equipmentFieldHtml = `
       <div class="field">
-        <label>2) المعدات والآلات المستخدمة الخاصة بهذه الخطوة — اكتب واضغط Enter لإضافة كل عنصر</label>
+        <label>2) ${isSop ? "المواد المطلوبة (Material Required)" : "المعدات والآلات المستخدمة الخاصة بهذه الخطوة"} — اكتب واضغط Enter لإضافة كل عنصر</label>
         <div class="chip-input" data-reqs='${JSON.stringify(step.requirements || [])}'>
           ${(step.requirements || []).map((r, i) => `<span class="chip" data-i="${i}">${esc(r)}<button type="button">×</button></span>`).join("")}
-          <input class="req-input" placeholder="أضف أداة أو آلة..." style="border:none; flex:1; min-width:120px; padding:4px;"/>
+          <input class="req-input" placeholder="أضف ${isSop ? "مادة" : "أداة أو آلة"}..." style="border:none; flex:1; min-width:120px; padding:4px;"/>
         </div>
         <label class="sp-use-general-label" style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px;">
           <input type="checkbox" class="sp-use-general" ${step.use_general_equipment !== false ? "checked" : ""}/>
@@ -581,11 +593,11 @@ const Editor = {
         </label>
         <p class="hint">تُؤخذ معدات وإجراءات السلامة تلقائيًا من بيانات الـ SOP أعلاه — لا حاجة لكتابتها هنا.</p>
       </div>
+    `;
 
-      <div class="field"><label>3) متطلبات العمل (Work Requirements)</label><textarea class="sp-desc" placeholder="اكتب خطوات التنفيذ الفعلية بالتفصيل...">${esc(step.description)}</textarea></div>
-
+    const imageFieldHtml = `
       <div class="field">
-        <label>4) صورة الخطوة</label>
+        <label>${isSop ? "6) صور (Photo)" : "4) صورة الخطوة"}</label>
         <div class="img-upload-row">
           ${(step.images || []).map(img => `
             <div class="img-thumb" data-img-id="${img.id}" data-url="${attr(img.image_url)}">
@@ -598,7 +610,29 @@ const Editor = {
           </label>
         </div>
       </div>
+    `;
 
+    // منتصف الفورم: مختلف حسب النوع — SOP بعناصر النموذج الجديدة، SIP زي ما هي
+    const middleFieldsHtml = isSop ? `
+      <div class="field"><label>3) تسلسل الإجراءات (Process Sequence)</label><textarea class="sp-process-seq" placeholder="اكتب تسلسل الخطوات التنفيذية بالترتيب...">${esc(step.process_sequence)}</textarea></div>
+      <div class="field"><label>5) مضمون العمل (Description)</label><textarea class="sp-desc" placeholder="اشرح مضمون العمل المطلوب...">${esc(step.description)}</textarea></div>
+      ${imageFieldHtml}
+      <div class="field-row">
+        <div class="field"><label>7) مضمون الفحص (Standard Inspection)</label><textarea class="sp-accept" placeholder="مثال: 1. يتطابق مع نموذج المديل 2. لا يوجد خدوش أو كسور">${esc(step.accept_criteria)}</textarea></div>
+        <div class="field"><label>8) تحديد المعيار</label><textarea class="sp-criteria-def" placeholder="مثال: الفجوة 0.5-1mm، العزم 2.5 N·m ± 0.3">${esc(step.criteria_definition)}</textarea></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>9) طريقة الفحص (Inspection Method)</label><textarea class="sp-method" placeholder="مثال: فحص بصري بمصباح يدوي على بعد 400 مم">${esc(step.inspection_method)}</textarea></div>
+        <div class="field"><label>10) عدد مرات التكرار (Inspection Repetition)</label><input class="sp-repeat" value="${attr(step.inspection_repeat)}" placeholder="مثال: كل قطعة / كل ساعة / عينة عشوائية"/></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>11) الزمن بالثانية</label><input class="sp-time-seconds" type="number" min="0" value="${step.time_seconds ?? ""}" placeholder="مثال: 30"/></div>
+        <div class="field"><label>12) تجنب الحوادث</label><input class="sp-accident-prevention" value="${attr(step.accident_prevention)}" placeholder="مثال: افصل الكهرباء قبل الفتح"/></div>
+      </div>
+      <div class="field"><label>13) الأمان</label><p class="hint">تُؤخذ معدات وإجراءات السلامة تلقائيًا من بيانات الـ SOP في الأعلى.</p></div>
+    ` : `
+      <div class="field"><label>3) متطلبات العمل (Work Requirements)</label><textarea class="sp-desc" placeholder="اكتب خطوات التنفيذ الفعلية بالتفصيل...">${esc(step.description)}</textarea></div>
+      ${imageFieldHtml}
       <div class="field-row">
         <div class="field"><label>5) الفحص القياسي (Standard Inspection)</label><textarea class="sp-accept" placeholder="مثال: 1. يتطابق مع نموذج المديل 2. لا يوجد خدوش أو كسور">${esc(step.accept_criteria)}</textarea></div>
         <div class="field"><label>6) طريقة الفحص</label><textarea class="sp-method" placeholder="مثال: فحص بصري بمصباح يدوي على بعد 400 مم">${esc(step.inspection_method)}</textarea></div>
@@ -607,6 +641,12 @@ const Editor = {
         <div class="field"><label>7) التكرار</label><input class="sp-repeat" value="${attr(step.inspection_repeat)}" placeholder="مثال: كل قطعة / كل ساعة / عينة عشوائية"/></div>
         <div class="field"><label>8) الإجراء عند الرفض</label><input class="sp-reject-action" value="${attr(step.reject_action)}" placeholder="مثال: أوقف المحطة، ضع بطاقة رفض، بلّغ المشرف"/></div>
       </div>
+    `;
+
+    el.innerHTML = `
+      ${titleFieldHtml}
+      ${equipmentFieldHtml}
+      ${middleFieldsHtml}
 
       <details class="editor-extra">
         <summary>بيانات إضافية (اختياري)</summary>
@@ -622,6 +662,7 @@ const Editor = {
           <div class="field"><label>كود العيب المرتبط</label><input class="sp-defect" value="${attr(step.defect_code)}" placeholder="مثال: DEF-COND-014"/></div>
           <div class="field"><label><input type="checkbox" class="sp-critical" ${step.is_critical ? "checked" : ""}/> خطوة حرجة (وقفة إلزامية)</label></div>
         </div>
+        ${!isSop ? "" : `<div class="field"><label>الإجراء عند الرفض (اختياري لنموذج SOP)</label><input class="sp-reject-action" value="${attr(step.reject_action)}" placeholder="مثال: أوقف المحطة، بلّغ المشرف"/></div>`}
       </details>
 
       <div class="editor-toolbar">
@@ -710,10 +751,17 @@ const Editor = {
         accept_criteria: el.querySelector(".sp-accept").value.trim() || null,
         inspection_method: el.querySelector(".sp-method").value.trim() || null,
         inspection_repeat: el.querySelector(".sp-repeat").value.trim() || null,
-        reject_action: el.querySelector(".sp-reject-action").value.trim() || null,
+        reject_action: el.querySelector(".sp-reject-action")?.value.trim() || null,
         defect_code: el.querySelector(".sp-defect").value.trim() || null,
         is_critical: el.querySelector(".sp-critical").checked,
       };
+      if (isSop) {
+        payload.process_sequence = el.querySelector(".sp-process-seq")?.value.trim() || null;
+        payload.criteria_definition = el.querySelector(".sp-criteria-def")?.value.trim() || null;
+        const timeRaw = el.querySelector(".sp-time-seconds")?.value.trim();
+        payload.time_seconds = timeRaw ? Number(timeRaw) : null;
+        payload.accident_prevention = el.querySelector(".sp-accident-prevention")?.value.trim() || null;
+      }
       await DB.updateStep(step.id, payload);
       Object.assign(step, payload);
     });
