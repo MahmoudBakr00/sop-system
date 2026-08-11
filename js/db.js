@@ -264,6 +264,80 @@ const DB = {
     if (error) throw error;
   },
 
+  // ---------- نسخ SOP كاملة (بيانات + خطوات + صور + أدوات + مراجع) لمصنع/خط تاني ----------
+  async duplicateSop(sopId, overrides = {}) {
+    const original = await this.getSopFull(sopId);
+    const { data: userData } = await supabaseClient.auth.getUser();
+    const uid = userData?.user?.id;
+
+    const { data: newSop, error: e1 } = await supabaseClient.from("sops").insert({
+      title: original.title, title_ar: original.title_ar ? `${original.title_ar} (نسخة)` : original.title_ar,
+      factory: overrides.factory ?? original.factory,
+      station: overrides.station ?? original.station,
+      station_no: null, flow_lane: 0, // عشان مايتصدمش مع رقم محطة مستخدم أصلًا
+      inspection_frequency: original.inspection_frequency,
+      inspection_environment: original.inspection_environment,
+      video_url: original.video_url,
+      safety_notes: original.safety_notes,
+      pre_work_procedure: original.pre_work_procedure,
+      post_work_procedure: original.post_work_procedure,
+      trainer_name: original.trainer_name, trainer_position: original.trainer_position,
+      inspector_name: original.inspector_name, inspector_position: original.inspector_position,
+      supervisor_name: original.supervisor_name, supervisor_position: original.supervisor_position,
+      notes: original.notes,
+      deviation_handling: original.deviation_handling,
+      status: "draft", approval_status: "draft", version: 1, code: null,
+      created_by: uid, updated_by: uid,
+    }).select().single();
+    if (e1) throw e1;
+
+    const { data: newStage, error: e2 } = await supabaseClient.from("stages")
+      .insert({ sop_id: newSop.id, order_index: 0, title: "خطوات", title_ar: "خطوات" }).select().single();
+    if (e2) throw e2;
+
+    const originalSteps = (original.stages || []).flatMap(s => s.steps || []);
+    let order = 0;
+    for (const step of originalSteps) {
+      const { data: newStep, error: e3 } = await supabaseClient.from("steps").insert({
+        stage_id: newStage.id, order_index: order++,
+        title: step.title, title_ar: step.title_ar,
+        description: step.description,
+        requirements: step.requirements || [],
+        use_general_equipment: step.use_general_equipment,
+        responsible_role: step.responsible_role,
+        spec_value: step.spec_value,
+        accept_criteria: step.accept_criteria,
+        inspection_method: step.inspection_method,
+        inspection_repeat: step.inspection_repeat,
+        reject_action: step.reject_action,
+        defect_code: step.defect_code,
+        is_critical: step.is_critical,
+      }).select().single();
+      if (e3) throw e3;
+
+      if (step.images && step.images.length) {
+        await supabaseClient.from("step_images").insert(
+          step.images.map((img, i) => ({
+            step_id: newStep.id, order_index: i, image_url: img.image_url, caption: img.caption,
+          }))
+        );
+      }
+    }
+
+    if (original.tools && original.tools.length) {
+      await supabaseClient.from("sop_tools").insert(
+        original.tools.map((t, i) => ({ sop_id: newSop.id, order_index: i, category: t.category, name: t.name, spec: t.spec }))
+      );
+    }
+    if (original.references && original.references.length) {
+      await supabaseClient.from("sop_references").insert(
+        original.references.map((r, i) => ({ sop_id: newSop.id, order_index: i, ref_text: r.ref_text, ref_url: r.ref_url }))
+      );
+    }
+
+    return newSop;
+  },
+
   async createSop(payload) {
     const { data: userData } = await supabaseClient.auth.getUser();
     const { data, error } = await supabaseClient.from("sops").insert({
