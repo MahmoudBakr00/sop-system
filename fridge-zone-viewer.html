@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تقسيمة فحص الثلاجة</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<style>
+  .tabs{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; }
+  .tab-btn{
+    padding:9px 16px; border:1px solid var(--blueprint-line,#ccc); border-radius:8px;
+    background:#fff; font-size:14px; cursor:pointer;
+  }
+  .tab-btn.active{ background:var(--amber,#e0912a); border-color:var(--amber-dark,#b5730f); }
+  .layout{ display:grid; grid-template-columns:1fr; gap:20px; }
+  @media(min-width:760px){ .layout{ grid-template-columns:340px 1fr; } }
+  .stage{ background:#fff; border:1px solid var(--blueprint-line,#ddd); border-radius:10px; padding:20px; min-height:300px; }
+  .zone-box{
+    border:1.5px solid var(--blueprint-line,#bbb); border-radius:8px; background:#f7f6f1;
+    padding:16px; cursor:pointer; margin-bottom:12px;
+  }
+  .zone-box.selected{ background:#fdf1dc; border-color:var(--amber,#e0912a); }
+  .zone-name{ font-size:15px; font-weight:600; }
+  .zone-code{ font-size:12px; color:#777; margin-top:2px; }
+  .row-zones{ display:flex; gap:12px; flex-wrap:wrap; }
+  .row-zones .zone-box{ flex:1 1 140px; }
+  .panel{ background:#fff; border:1px solid var(--blueprint-line,#ddd); border-radius:10px; padding:20px; }
+  .sop-item{
+    display:block; padding:12px; border:1px solid var(--blueprint-line,#ddd); border-radius:8px;
+    background:#fdf6e6; font-size:13px; margin-bottom:8px; text-decoration:none; color:inherit;
+  }
+  .sop-item:hover{ border-color:var(--amber,#e0912a); }
+  .sop-code{ font-size:11px; color:#999; font-family:var(--font-mono,monospace); }
+  .empty-state{ color:#888; font-size:14px; text-align:center; padding:40px 10px; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">تقسيمة فحص الثلاجة</div>
+  <nav><a href="index.html">⟵ رجوع للنظام</a></nav>
+</div>
+
+<div style="max-width:900px; margin:24px auto; padding:0 16px;">
+  <p class="hint" style="margin-bottom:18px;">دوس على الواجهة، بعدين على أي جزء، وهيوريك كل الـ SOPs/SIPs المرتبطة بالمنطقة دي من النظام مباشرة.</p>
+  <div class="tabs" id="tabs"></div>
+  <div class="layout">
+    <div class="stage"><div id="stageContent"></div></div>
+    <div class="panel" id="infoPanel"><div class="empty-state">اختار جزء من الثلاجة</div></div>
+  </div>
+</div>
+
+<script>
+const ZONE_DATA = {
+  DU:  { name:'الباب العلوي', sub:'داخل + خارج' },
+  DL:  { name:'الباب السفلي', sub:'داخل + خارج' },
+  SLU: { name:'الجانب الشمال العلوي', sub:'خارجي' },
+  SLL: { name:'الجانب الشمال السفلي', sub:'خارجي' },
+  SRU: { name:'الجانب اليمين العلوي', sub:'خارجي' },
+  SRL: { name:'الجانب اليمين السفلي', sub:'خارجي' },
+  BKU: { name:'الظهر العلوي', sub:'خارجي' },
+  BKL: { name:'الظهر السفلي ومنطقة الكباس', sub:'كهربائي + تشطيب' },
+  TOP: { name:'أعلى الثلاجة', sub:'خارجي' },
+  FRZ: { name:'داخل الفريزر', sub:'مرحلة نهائية' },
+  CAB: { name:'داخل الكبينة', sub:'مرحلة نهائية' },
+  PRE: { name:'قبل الحقن وداخل الثلاجة', sub:'أثناء الإنتاج' },
+};
+
+const views = {
+  front:    { label:'الواجهة الأمامية', type:'stack', zones:['DU','DL'] },
+  left:     { label:'الجانب الشمال',    type:'stack', zones:['SLU','SLL'] },
+  right:    { label:'الجانب اليمين',    type:'stack', zones:['SRU','SRL'] },
+  back:     { label:'الظهر',            type:'stack', zones:['BKU','BKL'] },
+  top:      { label:'السقف',            type:'row',   zones:['TOP'] },
+  interior: { label:'الداخل',           type:'row',   zones:['FRZ','CAB','PRE'] },
+};
+
+let currentView = 'front';
+let selectedZone = null;
+
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function renderTabs(){
+  const tabsEl = document.getElementById('tabs');
+  tabsEl.innerHTML = '';
+  Object.entries(views).forEach(([key, v]) => {
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn' + (key === currentView ? ' active' : '');
+    btn.textContent = v.label;
+    btn.onclick = () => { currentView = key; selectedZone = null; render(); };
+    tabsEl.appendChild(btn);
+  });
+}
+
+function renderStage(){
+  const view = views[currentView];
+  const stageContentEl = document.getElementById('stageContent');
+  stageContentEl.innerHTML = '';
+  const wrap = document.createElement('div');
+  if(view.type === 'row') wrap.className = 'row-zones';
+  view.zones.forEach(id => {
+    const z = ZONE_DATA[id];
+    const box = document.createElement('div');
+    box.className = 'zone-box' + (selectedZone === id ? ' selected' : '');
+    box.innerHTML = `<div class="zone-name">${esc(z.name)}</div><div class="zone-code">${esc(z.sub)} · ${id}</div>`;
+    box.onclick = () => { selectedZone = id; renderStage(); loadPanel(id); };
+    wrap.appendChild(box);
+  });
+  stageContentEl.appendChild(wrap);
+}
+
+async function loadPanel(zoneId){
+  const panel = document.getElementById('infoPanel');
+  panel.innerHTML = '<div class="empty-state">بيحمّل...</div>';
+  try{
+    // sops.zones is a text[] column — .contains checks the array holds this zone code
+    const { data, error } = await supabaseClient
+      .from('sops')
+      .select('id, code, title_ar, doc_type, station, status')
+      .contains('zones', [zoneId])
+      .order('updated_at', { ascending: false });
+    if(error) throw error;
+
+    const z = ZONE_DATA[zoneId];
+    if(!data || !data.length){
+      panel.innerHTML = `<h2>${esc(z.name)}</h2><div class="empty-state">مفيش SOPs أو SIPs متربطة بالمنطقة دي لسه</div>`;
+      return;
+    }
+    panel.innerHTML = `<h2>${esc(z.name)}</h2>` + data.map(s => `
+      <a class="sop-item" href="index.html#/sop/${s.id}/view">
+        <div><b>${esc(s.title_ar || s.title || 'بدون عنوان')}</b> <span class="sop-code">${esc(s.doc_type || 'SOP')}</span></div>
+        <div class="sop-code">${esc(s.code || 'بدون كود')} · ${esc(s.station || '')} · ${esc(s.status || '')}</div>
+      </a>
+    `).join('');
+  }catch(err){
+    console.error(err);
+    panel.innerHTML = `<div class="empty-state">حصل خطأ في التحميل: ${esc(err.message)}</div>`;
+  }
+}
+
+function render(){ renderTabs(); renderStage(); }
+render();
+</script>
+</body>
+</html>
