@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>استيراد SOP/SIP من إكسيل</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --bg:#f4f5f7; --card:#fff; --border:#dcdfe4; --border-strong:#b9bec6;
+    --text:#1f2328; --text-2:#5b6270; --accent:#2563eb; --accent-bg:#e8f0fe;
+    --warn:#b45309; --warn-bg:#fef3c7; --ok:#15803d; --ok-bg:#dcfce7;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; padding:24px; font-family:"Segoe UI",Tahoma,Arial,sans-serif; background:var(--bg); color:var(--text);}
+  h1{font-size:20px; font-weight:600; margin:0 0 4px;}
+  .sub{color:var(--text-2); font-size:13px; margin:0 0 20px;}
+
+  .dropzone{
+    border:2px dashed var(--border-strong); border-radius:var(--radius);
+    background:var(--card); padding:36px; text-align:center; cursor:pointer;
+    color:var(--text-2); font-size:14px; margin-bottom:20px; transition:.15s;
+  }
+  .dropzone:hover, .dropzone.drag{ background:var(--accent-bg); border-color:var(--accent); }
+  .dropzone input{ display:none; }
+  .status{ font-size:13px; color:var(--text-2); margin-bottom:16px; }
+
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; margin-bottom:16px; }
+  .card h2{ font-size:15px; margin:0 0 12px; }
+  .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:10px; }
+  label{ font-size:12px; color:var(--text-2); display:block; margin-bottom:4px; }
+  input[type=text], textarea{
+    width:100%; border:1px solid var(--border); border-radius:6px; padding:8px 10px;
+    font-family:inherit; font-size:13px; background:#fff; color:var(--text);
+  }
+  textarea{ min-height:56px; resize:vertical; }
+
+  .zones-grid{ display:flex; flex-wrap:wrap; gap:8px; }
+  .zone-chip{
+    border:1px solid var(--border); border-radius:20px; padding:6px 14px; font-size:12.5px;
+    cursor:pointer; user-select:none; background:#fff;
+  }
+  .zone-chip.on{ background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  .step-card{ border-right:3px solid var(--accent); }
+  .step-card.pre, .step-card.post{ border-right-color:var(--text-2); }
+  .step-badge{
+    display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:6px;
+    background:var(--accent-bg); color:var(--accent); margin-inline-start:8px;
+  }
+  .photos-row{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .photo-thumb{ width:84px; height:84px; border-radius:6px; overflow:hidden; border:1px solid var(--border); }
+  .photo-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .no-photo{ font-size:12px; color:var(--text-2); }
+
+  .warn-box{
+    background:var(--warn-bg); color:var(--warn); border:1px solid #f5d99b;
+    border-radius:8px; padding:12px 14px; font-size:13px; margin-bottom:16px;
+  }
+  .unassigned-grid{ display:flex; flex-wrap:wrap; gap:10px; }
+  .unassigned-item{ text-align:center; }
+  .unassigned-item img{ width:90px; height:90px; object-fit:cover; border-radius:6px; border:1px solid var(--border); }
+  .unassigned-item select{
+    display:block; margin-top:4px; font-size:11px; width:96px; border:1px solid var(--border);
+    border-radius:5px; padding:3px;
+  }
+
+  .actions{ display:flex; gap:10px; margin-top:20px; }
+  button.primary{
+    background:var(--accent); color:#fff; border:none; border-radius:8px; padding:10px 20px;
+    font-size:14px; cursor:pointer;
+  }
+  button.ghost{
+    background:#fff; border:1px solid var(--border); border-radius:8px; padding:10px 20px;
+    font-size:14px; cursor:pointer;
+  }
+  #resultArea{ display:none; }
+</style>
+</head>
+<body>
+
+<h1>استيراد SOP / SIP من ملف إكسيل</h1>
+<p class="sub">ارفع ملف الإكسيل بنفس شكل التمبلت المعتاد. البرنامج هيكتشف عدد الخطوات لوحده (مهما اختلف من ملف للتاني)، ويسحب الصور المربوطة صح بكل خطوة تلقائي، ويكمل انت الباقي.</p>
+
+<div class="dropzone" id="dropzone">
+  <input type="file" id="fileInput" accept=".xlsx">
+  اسحب ملف الإكسيل هنا أو دوس علشان تختاره
+</div>
+<div class="status" id="status"></div>
+
+<div id="resultArea">
+
+  <div class="card">
+    <h2>بيانات SOP الأساسية</h2>
+    <div class="field-row">
+      <div><label>اسم الفحص</label><input type="text" id="metaTitle"></div>
+      <div><label>رقم SOP</label><input type="text" id="metaNo"></div>
+    </div>
+    <div class="field-row">
+      <div><label>الإصدار</label><input type="text" id="metaVer"></div>
+      <div><label>إعداد</label><input type="text" id="metaPrep"></div>
+    </div>
+    <div class="field-row">
+      <div><label>اعتماد</label><input type="text" id="metaApprove"></div>
+      <div></div>
+    </div>
+    <label style="margin-top:6px;">الموقع/المواقع في الثلاجة (مش موجودة في الإكسيل - حددها يدوي)</label>
+    <div class="zones-grid" id="zonesGrid"></div>
+  </div>
+
+  <div id="warnBox"></div>
+
+  <div id="stepsArea"></div>
+
+  <div class="card" id="unassignedCard" style="display:none;">
+    <h2>صور محتاجة مراجعة (مش مربوطة بخطوة معينة في الملف الأصلي)</h2>
+    <p class="sub" style="margin-bottom:12px;">حدد لكل صورة الخطوة المناسبة، أو سيبها من غير تحديد لو مش لازمة.</p>
+    <div class="unassigned-grid" id="unassignedGrid"></div>
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="exportBtn">تصدير JSON</button>
+    <button class="ghost" id="resetBtn">ملف جديد</button>
+  </div>
+</div>
+
+<script>
+/* ============ تقسيمة مناطق الثلاجة (نفس الكودات اللي اتعملت قبل كده) ============ */
+const ZONES = [
+  {id:'DU', name:'الباب العلوي'}, {id:'DL', name:'الباب السفلي'},
+  {id:'SLU', name:'الجانب الشمال العلوي'}, {id:'SLL', name:'الجانب الشمال السفلي'},
+  {id:'SRU', name:'الجانب اليمين العلوي'}, {id:'SRL', name:'الجانب اليمين السفلي'},
+  {id:'BKU', name:'الظهر العلوي'}, {id:'BKL', name:'الظهر السفلي ومنطقة الكباس'},
+  {id:'TOP', name:'أعلى الثلاجة'},
+  {id:'FRZ', name:'داخل الفريزر'}, {id:'CAB', name:'داخل الكبينة'}, {id:'PRE', name:'قبل الحقن'},
+];
+
+/* ============ كلمات مفتاحية لاكتشاف صف الهيدر تلقائي (عربي/إنجليزي) ============ */
+const HEADER_KEYWORDS = {
+  step:      ['الخطوات', 'steps'],
+  content:   ['محتوى', 'content'],
+  tools:     ['العدة', 'tools'],
+  standard:  ['الفحص القياس', 'standard inspection'],
+  requirements: ['متطلبات', 'requirements'],
+  photos:    ['الصور', 'photos'],
+};
+const PRE_KEYWORDS  = ['قبل العمل', 'قبل الفحص'];
+const POST_KEYWORDS = ['بعد العمل', 'بعد الفحص'];
+const STOP_KEYWORDS = ['st', 'نموذج مؤهل'];
+
+let selectedZones = new Set();
+let parsedData = null;
+
+/* ---------- UI: zone chips ---------- */
+function renderZoneChips(){
+  const grid = document.getElementById('zonesGrid');
+  grid.innerHTML = '';
+  ZONES.forEach(z => {
+    const chip = document.createElement('div');
+    chip.className = 'zone-chip' + (selectedZones.has(z.id) ? ' on' : '');
+    chip.textContent = z.name;
+    chip.onclick = () => {
+      selectedZones.has(z.id) ? selectedZones.delete(z.id) : selectedZones.add(z.id);
+      renderZoneChips();
+    };
+    grid.appendChild(chip);
+  });
+}
+renderZoneChips();
+
+/* ---------- Drag & drop / file input ---------- */
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+dropzone.onclick = () => fileInput.click();
+dropzone.ondragover = e => { e.preventDefault(); dropzone.classList.add('drag'); };
+dropzone.ondragleave = () => dropzone.classList.remove('drag');
+dropzone.ondrop = e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+};
+fileInput.onchange = () => { if(fileInput.files[0]) handleFile(fileInput.files[0]); };
+document.getElementById('resetBtn').onclick = () => location.reload();
+
+function setStatus(msg){ document.getElementById('status').textContent = msg; }
+
+/* ============ المحرك الأساسي: قراءة الإكسيل وتفكيكه ============ */
+async function handleFile(file){
+  setStatus('بيقرأ الملف...');
+  try{
+    const zip = await JSZip.loadAsync(file);
+    const data = await parseWorkbook(zip);
+    parsedData = data;
+    renderResult(data);
+    setStatus('تم التحليل: ' + data.steps.length + ' خطوة، ' +
+      data.steps.reduce((n,s)=>n+s.photos.length,0) + ' صورة مربوطة تلقائي، ' +
+      data.unassignedPhotos.length + ' صورة محتاجة مراجعة.');
+  }catch(err){
+    console.error(err);
+    setStatus('حصل خطأ في قراءة الملف: ' + err.message);
+  }
+}
+
+function colToIndex(col){
+  let n = 0;
+  for(let i=0;i<col.length;i++) n = n*26 + (col.charCodeAt(i)-64);
+  return n-1;
+}
+function splitRef(ref){
+  const m = ref.match(/^([A-Z]+)(\d+)$/);
+  return { col: colToIndex(m[1]), row: parseInt(m[2],10) };
+}
+
+async function parseWorkbook(zip){
+  const parser = new DOMParser();
+  const xml = path => zip.file(path).async('string').then(t => parser.parseFromString(t, 'application/xml'));
+
+  // 1. find first sheet target via workbook.xml + rels
+  const wbDoc = await xml('xl/workbook.xml');
+  const firstSheetRid = wbDoc.getElementsByTagName('sheet')[0].getAttribute('r:id');
+  const wbRelsDoc = await xml('xl/_rels/workbook.xml.rels');
+  let sheetPath = 'xl/worksheets/sheet1.xml';
+  for(const rel of wbRelsDoc.getElementsByTagName('Relationship')){
+    if(rel.getAttribute('Id') === firstSheetRid){
+      sheetPath = 'xl/' + rel.getAttribute('Target').replace(/^\.?\/?/, '');
+    }
+  }
+  const sheetName = sheetPath.split('/').pop().replace('.xml','');
+
+  // 2. shared strings
+  let sharedStrings = [];
+  if(zip.file('xl/sharedStrings.xml')){
+    const ssDoc = await xml('xl/sharedStrings.xml');
+    sharedStrings = Array.from(ssDoc.getElementsByTagName('si')).map(si => {
+      return Array.from(si.getElementsByTagName('t')).map(t => t.textContent).join('');
+    });
+  }
+
+  // 3. sheet cells -> grid
+  const sheetDoc = await xml(sheetPath);
+  const grid = {}; // "row,col" -> text
+  for(const rowEl of sheetDoc.getElementsByTagName('row')){
+    for(const cEl of rowEl.getElementsByTagName('c')){
+      const ref = cEl.getAttribute('r');
+      if(!ref) continue;
+      const {col,row} = splitRef(ref);
+      const t = cEl.getAttribute('t');
+      let val = '';
+      if(t === 's'){
+        const v = cEl.getElementsByTagName('v')[0];
+        if(v) val = sharedStrings[parseInt(v.textContent,10)] || '';
+      }else if(t === 'inlineStr'){
+        const isEl = cEl.getElementsByTagName('is')[0];
+        if(isEl) val = Array.from(isEl.getElementsByTagName('t')).map(t=>t.textContent).join('');
+      }else{
+        const v = cEl.getElementsByTagName('v')[0];
+        if(v) val = v.textContent;
+      }
+      if(val) grid[row+','+col] = val.trim();
+    }
+  }
+
+  // 4. merged cells -> map top-left "row,col" -> {rowEnd, colEnd}
+  const merges = {};
+  const mergeCellsEl = sheetDoc.getElementsByTagName('mergeCell');
+  for(const mc of mergeCellsEl){
+    const ref = mc.getAttribute('ref');
+    const [a,b] = ref.split(':');
+    const start = splitRef(a), end = splitRef(b);
+    merges[start.row+','+start.col] = end;
+  }
+
+  // 5. locate & parse drawing (images)
+  let images = []; // {row0, rowEnd0, rid}
+  let mediaByRid = {}; // rid -> objectURL
+  const sheetRelsPath = sheetPath.replace('worksheets/', 'worksheets/_rels/') + '.rels';
+  if(zip.file(sheetRelsPath)){
+    const sheetRelsDoc = await xml(sheetRelsPath);
+    let drawingPath = null;
+    const drawingTag = sheetDoc.getElementsByTagName('drawing')[0];
+    if(drawingTag){
+      const drId = drawingTag.getAttribute('r:id');
+      for(const rel of sheetRelsDoc.getElementsByTagName('Relationship')){
+        if(rel.getAttribute('Id') === drId){
+          drawingPath = 'xl/' + rel.getAttribute('Target').replace(/^\.?\/?/, '');
+        }
+      }
+    }
+    if(drawingPath && zip.file(drawingPath)){
+      const drDoc = await xml(drawingPath);
+      const drRelsPath = drawingPath.replace('drawings/', 'drawings/_rels/') + '.rels';
+      const drRelsDoc = zip.file(drRelsPath) ? await xml(drRelsPath) : null;
+      const ridToTarget = {};
+      if(drRelsDoc){
+        for(const rel of drRelsDoc.getElementsByTagName('Relationship')){
+          ridToTarget[rel.getAttribute('Id')] = 'xl/' + rel.getAttribute('Target').replace(/^\.?\/?/, '');
+        }
+      }
+      // load every referenced media file as an object URL, once
+      for(const rid in ridToTarget){
+        const path = ridToTarget[rid];
+        if(zip.file(path)){
+          const blob = await zip.file(path).async('blob');
+          mediaByRid[rid] = URL.createObjectURL(blob);
+        }
+      }
+      // oneCellAnchor: single anchor row (no explicit end -> treat as same row)
+      for(const a of drDoc.getElementsByTagName('xdr:oneCellAnchor')){
+        const rowEl = a.getElementsByTagName('xdr:from')[0].getElementsByTagName('xdr:row')[0];
+        const blip = a.getElementsByTagName('a:blip')[0];
+        if(!rowEl || !blip) continue;
+        const row0 = parseInt(rowEl.textContent,10);
+        const rid = blip.getAttribute('r:embed');
+        images.push({row0, rowEnd0: row0, rid});
+      }
+      // twoCellAnchor: has explicit from/to row range -> most reliable for step mapping
+      for(const a of drDoc.getElementsByTagName('xdr:twoCellAnchor')){
+        const fromRow = a.getElementsByTagName('xdr:from')[0].getElementsByTagName('xdr:row')[0];
+        const toRow = a.getElementsByTagName('xdr:to')[0]?.getElementsByTagName('xdr:row')[0];
+        const blip = a.getElementsByTagName('a:blip')[0];
+        if(!fromRow || !blip) continue;
+        const row0 = parseInt(fromRow.textContent,10);
+        const rowEnd0 = toRow ? parseInt(toRow.textContent,10) : row0;
+        const rid = blip.getAttribute('r:embed');
+        images.push({row0, rowEnd0, rid});
+      }
+    }
+  }
+
+  // 6. find max row/col to iterate the grid in order
+  let maxRow = 0, maxCol = 0;
+  for(const key in grid){
+    const [r,c] = key.split(',').map(Number);
+    if(r>maxRow) maxRow = r;
+    if(c>maxCol) maxCol = c;
+  }
+
+  const cell = (r,c) => grid[r+','+c] || '';
+  const rowText = r => { let arr=[]; for(let c=0;c<=maxCol;c++) if(cell(r,c)) arr.push(cell(r,c)); return arr.join(' | '); };
+
+  // 7. find header row + column map by keyword matching
+  let headerRow = -1, colMap = {};
+  for(let r=1; r<=maxRow; r++){
+    let found = {};
+    for(let c=0; c<=maxCol; c++){
+      const txt = cell(r,c).toLowerCase();
+      if(!txt) continue;
+      for(const field in HEADER_KEYWORDS){
+        if(HEADER_KEYWORDS[field].some(k => txt.includes(k))) found[field] = c;
+      }
+    }
+    if(Object.keys(found).length >= 3){ headerRow = r; colMap = found; break; }
+  }
+  if(headerRow === -1) throw new Error('معرفتش ألاقي صف الهيدر (Steps/Content/Tools...) في الملف ده');
+
+  // 8. meta info: title = longest merged text in rows above header; NO./Ver. via regex; اعداد/اعتماد labels
+  let title = '', sopNo = '', version = '', preparedBy = '', approvedBy = '';
+  for(let r=1; r<headerRow; r++){
+    for(let c=0; c<=maxCol; c++){
+      const txt = cell(r,c);
+      if(!txt) continue;
+      if(/^no\.?\s*\d+/i.test(txt)) sopNo = txt;
+      else if(/^ver\.?\s*\d*/i.test(txt)) version = txt;
+      else if(txt.includes('اعداد') || txt.toLowerCase().includes('prepared')) preparedBy = cell(r+1,c) || cell(r,c+1);
+      else if(txt.includes('اعتماد') || txt.toLowerCase().includes('approv')) approvedBy = cell(r+1,c) || cell(r,c+1);
+      else if(txt.length > title.length && !txt.includes('توقيع')) title = txt;
+    }
+  }
+
+  // 9. walk rows after header -> build steps until a stop/post marker
+  const steps = [];
+  const stepCol = colMap.step;
+  for(let r = headerRow+1; r <= maxRow; r++){
+    const label = cell(r, stepCol);
+    if(!label) continue;
+    const low = label.toLowerCase().trim();
+    if(STOP_KEYWORDS.some(k => low === k || low.includes(k))) break;
+
+    const rowEnd = (merges[r+','+stepCol]) ? merges[r+','+stepCol].row : r;
+    let type = 'step';
+    if(PRE_KEYWORDS.some(k => label.includes(k))) type = 'pre';
+    if(POST_KEYWORDS.some(k => label.includes(k))) type = 'post';
+
+    steps.push({
+      type, label,
+      content: cell(r, colMap.content) || '',
+      tools: cell(r, colMap.tools) || '',
+      standard: cell(r, colMap.standard) || '',
+      requirements: cell(r, colMap.requirements) || '',
+      rowStart: r, rowEnd,
+      photos: [],
+      zoneOverride: '',
+    });
+
+    if(type === 'post') break;
+  }
+
+  // 10. assign images to steps by row-range overlap; leftovers -> unassigned
+  const unassignedPhotos = [];
+  for(const img of images){
+    const anchorRow1 = img.row0 + 1; // convert 0-indexed anchor to 1-indexed sheet row
+    const url = mediaByRid[img.rid];
+    if(!url) continue;
+    const step = steps.find(s => anchorRow1 >= s.rowStart && anchorRow1 <= s.rowEnd);
+    if(step) step.photos.push({url});
+    else unassignedPhotos.push({url, anchorRow: anchorRow1});
+  }
+
+  return { sheetName, title, sopNo, version, preparedBy, approvedBy, steps, unassignedPhotos };
+}
+
+/* ============ عرض النتيجة كفورم قابل للتعديل ============ */
+function renderResult(data){
+  document.getElementById('resultArea').style.display = 'block';
+  document.getElementById('metaTitle').value = data.title;
+  document.getElementById('metaNo').value = data.sopNo;
+  document.getElementById('metaVer').value = data.version;
+  document.getElementById('metaPrep').value = data.preparedBy;
+  document.getElementById('metaApprove').value = data.approvedBy;
+
+  const warnBox = document.getElementById('warnBox');
+  warnBox.innerHTML = '';
+  if(data.unassignedPhotos.length){
+    const w = document.createElement('div');
+    w.className = 'warn-box';
+    w.textContent = `فيه ${data.unassignedPhotos.length} صورة في الملف مش مربوطة بخطوة معينة (تظهر تحت). راجعها وحدد الخطوة المناسبة لكل واحدة.`;
+    warnBox.appendChild(w);
+  }
+
+  const stepsArea = document.getElementById('stepsArea');
+  stepsArea.innerHTML = '';
+  data.steps.forEach((s, i) => {
+    const card = document.createElement('div');
+    card.className = 'card step-card ' + s.type;
+    const badge = s.type === 'pre' ? 'قبل العمل' : s.type === 'post' ? 'بعد العمل' : 'خطوة';
+    card.innerHTML = `
+      <h2>${s.label}<span class="step-badge">${badge}</span></h2>
+      <div class="field-row">
+        <div><label>محتوى الفحص</label><textarea data-i="${i}" data-f="content">${s.content}</textarea></div>
+        <div><label>العدة</label><textarea data-i="${i}" data-f="tools">${s.tools}</textarea></div>
+      </div>
+      <div class="field-row">
+        <div><label>الفحص القياسي</label><textarea data-i="${i}" data-f="standard">${s.standard}</textarea></div>
+        <div><label>متطلبات العمل</label><textarea data-i="${i}" data-f="requirements">${s.requirements}</textarea></div>
+      </div>
+      <label>الصور المسحوبة تلقائي (${s.photos.length})</label>
+      <div class="photos-row">${
+        s.photos.length
+          ? s.photos.map(p => `<div class="photo-thumb"><img src="${p.url}"></div>`).join('')
+          : '<span class="no-photo">مفيش صور مربوطة تلقائي بالخطوة دي</span>'
+      }</div>
+    `;
+    stepsArea.appendChild(card);
+  });
+
+  // unassigned photos, each with a dropdown to assign to a step
+  const unassignedCard = document.getElementById('unassignedCard');
+  const grid = document.getElementById('unassignedGrid');
+  grid.innerHTML = '';
+  if(data.unassignedPhotos.length){
+    unassignedCard.style.display = 'block';
+    data.unassignedPhotos.forEach((p, i) => {
+      const item = document.createElement('div');
+      item.className = 'unassigned-item';
+      const options = ['<option value="">-- اختر خطوة --</option>']
+        .concat(data.steps.map((s, si) => `<option value="${si}">${s.label}</option>`));
+      item.innerHTML = `<img src="${p.url}"><select data-u="${i}">${options.join('')}</select>`;
+      grid.appendChild(item);
+    });
+  } else {
+    unassignedCard.style.display = 'none';
+  }
+
+  // live-bind edits back into parsedData
+  stepsArea.querySelectorAll('textarea').forEach(el => {
+    el.oninput = () => { parsedData.steps[el.dataset.i][el.dataset.f] = el.value; };
+  });
+  grid.querySelectorAll('select').forEach(el => {
+    el.onchange = () => {
+      const idx = el.dataset.u;
+      if(el.value !== '') parsedData.steps[el.value].photos.push(parsedData.unassignedPhotos[idx]);
+    };
+  });
+}
+
+document.getElementById('exportBtn').onclick = () => {
+  if(!parsedData) return;
+  const out = {
+    title: document.getElementById('metaTitle').value,
+    sopNo: document.getElementById('metaNo').value,
+    version: document.getElementById('metaVer').value,
+    preparedBy: document.getElementById('metaPrep').value,
+    approvedBy: document.getElementById('metaApprove').value,
+    zones: Array.from(selectedZones),
+    steps: parsedData.steps.map(s => ({
+      type: s.type, label: s.label, content: s.content, tools: s.tools,
+      standard: s.standard, requirements: s.requirements,
+      photoCount: s.photos.length,
+      // photos themselves are blob: URLs valid only in this browser tab;
+      // when wiring into Supabase, re-read the original File's zip entry
+      // for each photo and upload the bytes to Supabase Storage instead.
+    })),
+  };
+  const blob = new Blob([JSON.stringify(out, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (out.sopNo || 'sop') + '.json';
+  a.click();
+};
+</script>
+</body>
+</html>
