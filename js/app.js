@@ -71,6 +71,14 @@ const App = {
         const add = document.createElement("a");
         add.href = "#/new"; add.textContent = "+ SOP جديد";
         nav.appendChild(add);
+
+        const importBtn = document.createElement("a");
+        importBtn.href = "sop-excel-importer.html"; importBtn.textContent = "📥 استيراد من إكسيل";
+        nav.appendChild(importBtn);
+
+        const zonesBtn = document.createElement("a");
+        zonesBtn.href = "fridge-zone-viewer.html"; zonesBtn.textContent = "🧊 تقسيمة الثلاجة";
+        nav.appendChild(zonesBtn);
       }
       if (Auth.isAdmin()) {
         const users = document.createElement("a");
